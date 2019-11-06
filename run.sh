@@ -1,0 +1,1 @@
+docker run -it --privileged -v /home/ubuntu/Compilers:/home/stu/tiger-compiler-2019-fall se302/tigerlabs_env:latest /bin/bash
