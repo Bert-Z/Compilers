@@ -54,7 +54,7 @@ TY::Ty *SimpleVar::SemAnalyze(VEnvType venv, TEnvType tenv,
   }
   else
   {
-    errormsg.Error(this->pos, "undefined variable %s\n", this->sym->Name.c_str());
+    errormsg.Error(this->pos, "undefined variable %s\n", this->sym->Name().c_str());
     return TY::VoidTy::Instance();
   }
 }
@@ -63,21 +63,29 @@ TY::Ty *FieldVar::SemAnalyze(VEnvType venv, TEnvType tenv,
                              int labelcount) const
 {
   // TODO: Put your codes here (lab4).
-  TY::Ty *ltype = var->SemAnalyze(venv, tenv, labelcount);
-  if (ltype->kind == TY::Ty::VOID)
-    return ltype;
-
-  E::EnvEntry *env_entry = venv->Look(this->sym);
-  if (env_entry->kind == E::EnvEntry::VAR && env_entry)
+  TY::Ty *ltype = var->SemAnalyze(venv, tenv, labelcount)->ActualTy();
+  // check var
+  if (ltype->kind != TY::Ty::RECORD)
   {
-    E::VarEntry *var_entry = (E::VarEntry *)env_entry;
-    return var_entry->ty;
-  }
-  else
-  {
-    errormsg.Error(this->pos, "undefined variable %s\n", this->sym->Name);
+    errormsg.Error(this->pos, "not a record type");
     return TY::VoidTy::Instance();
   }
+
+  // check field
+  TY::FieldList *fields = ((TY::RecordTy *)ltype)->fields;
+  TY::Field *field;
+
+  for (; fields; fields = fields->tail)
+  {
+    field = fields->head;
+    if (field->name == this->sym)
+    {
+      return field->ty;
+    }
+  }
+  errormsg.Error(this->pos, "field %s doesn't exist", this->sym->Name().c_str());
+
+  return TY::VoidTy::Instance();
 }
 
 TY::Ty *SubscriptVar::SemAnalyze(VEnvType venv, TEnvType tenv,
@@ -85,12 +93,18 @@ TY::Ty *SubscriptVar::SemAnalyze(VEnvType venv, TEnvType tenv,
 {
   // TODO: Put your codes here (lab4).
   TY::Ty *ltype = var->SemAnalyze(venv, tenv, labelcount);
-  if (ltype->kind == TY::Ty::VOID)
-    return ltype;
+  if (ltype->kind != TY::Ty::ARRAY)
+  {
+    errormsg.Error(this->pos, "array type required");
+    return TY::VoidTy::Instance();
+  }
 
   TY::Ty *exptyppe = subscript->SemAnalyze(venv, tenv, labelcount);
-  if (exptyppe->kind == TY::Ty::VOID)
-    return exptyppe;
+  if (exptyppe->kind != TY::Ty::INT)
+  {
+    errormsg.Error(this->pos, "array index must be integer");
+    return TY::VoidTy::Instance();
+  }
 
   return ((TY::ArrayTy *)ltype)->ty;
 }
@@ -130,7 +144,7 @@ TY::Ty *CallExp::SemAnalyze(VEnvType venv, TEnvType tenv,
   A::ExpList *args = this->args;
   if (!env_entry || env_entry->kind != E::EnvEntry::FUN)
   {
-    errormsg.Error(this->pos, "undefined function %s", this->func->Name.c_str());
+    errormsg.Error(this->pos, "undefined function %s", this->func->Name().c_str());
     return TY::VoidTy::Instance();
   }
   TY::TyList *funcargs = ((E::FunEntry *)env_entry)->formals;
@@ -340,7 +354,7 @@ TY::Ty *ForExp::SemAnalyze(VEnvType venv, TEnvType tenv, int labelcount) const
   {
     errormsg.Error(this->pos, "for exp's range type is not integer");
   }
-  E::EnvEntry *env_entry = &(E::VarEntry(loty, true));
+  E::EnvEntry *env_entry = new E::VarEntry(loty, true);
   venv->Enter(this->var, env_entry);
   if (bodyty->kind != TY::Ty::VOID)
   {
@@ -384,7 +398,7 @@ TY::Ty *ArrayExp::SemAnalyze(VEnvType venv, TEnvType tenv,
   TY::Ty *arrayty = tenv->Look(this->typ);
   if (!arrayty)
   {
-    errormsg.Error(this->pos, "undefined type %s", this->typ->Name.c_str());
+    errormsg.Error(this->pos, "undefined type %s", this->typ->Name().c_str());
     return TY::VoidTy::Instance();
   }
 
@@ -437,11 +451,11 @@ void FunctionDec::SemAnalyze(VEnvType venv, TEnvType tenv,
         errormsg.Error(this->pos, "undefined return type %s", func->result);
         continue;
       }
-      venv->Enter(func->name, &(E::FunEntry(formaltys, resultTy)));
+      venv->Enter(func->name, new E::FunEntry(formaltys, resultTy));
     }
     else
     {
-      venv->Enter(func->name, &(E::FunEntry(formaltys, TY::VoidTy::Instance())));
+      venv->Enter(func->name, new E::FunEntry(formaltys, TY::VoidTy::Instance()));
     }
   }
 
@@ -455,7 +469,7 @@ void FunctionDec::SemAnalyze(VEnvType venv, TEnvType tenv,
     TY::TyList *tys;
     for (fields = func->params, tys = formaltys; fields; fields = fields->tail, tys = tys->tail)
     {
-      venv->Enter(fields->head->name, &(E::VarEntry(tys->head)));
+      venv->Enter(fields->head->name, new E::VarEntry(tys->head));
     }
     TY::Ty *bodyty = func->body->SemAnalyze(venv, tenv, labelcount);
     E::EnvEntry *func_entry = venv->Look(func->name);
@@ -483,7 +497,7 @@ void VarDec::SemAnalyze(VEnvType venv, TEnvType tenv, int labelcount) const
       errormsg.Error(this->pos, "init should not be nil without type specified");
       return;
     }
-    venv->Enter(this->var, &(E::VarEntry(expty)));
+    venv->Enter(this->var, new E::VarEntry(expty));
     return;
   }
   else
@@ -491,7 +505,7 @@ void VarDec::SemAnalyze(VEnvType venv, TEnvType tenv, int labelcount) const
     TY::Ty *typety = tenv->Look(this->typ);
     if (!typety)
     {
-      errormsg.Error(this->pos, "undefined type %s", this->typ->Name.c_str());
+      errormsg.Error(this->pos, "undefined type %s", this->typ->Name().c_str());
       return;
     }
 
@@ -501,7 +515,7 @@ void VarDec::SemAnalyze(VEnvType venv, TEnvType tenv, int labelcount) const
     if (!typety->IsSameType(expty) && expty->kind != TY::Ty::NIL)
       errormsg.Error(this->pos, "type mismatch");
 
-    venv->Enter(this->var, &(E::VarEntry(expty)));
+    venv->Enter(this->var, new E::VarEntry(expty));
   }
 }
 
@@ -522,7 +536,7 @@ void TypeDec::SemAnalyze(VEnvType venv, TEnvType tenv, int labelcount) const
     }
     else
     {
-      tenv->Enter(nty->name, &(TY::NameTy(nty->name, nty->ty->SemAnalyze(tenv))));
+      tenv->Enter(nty->name, new TY::NameTy(nty->name, nty->ty->SemAnalyze(tenv)));
     }
   }
 
@@ -553,10 +567,10 @@ TY::Ty *NameTy::SemAnalyze(TEnvType tenv) const
   TY::Ty *namety = tenv->Look(this->name);
   if (!namety)
   {
-    errormsg.Error(this->pos, "undefined type %s", this->name->Name.c_str());
+    errormsg.Error(this->pos, "undefined type %s", this->name->Name().c_str());
     return TY::VoidTy::Instance();
   }
-  return &(TY::NameTy(this->name, namety));
+  return new TY::NameTy(this->name, namety);
 }
 
 TY::Ty *RecordTy::SemAnalyze(TEnvType tenv) const
@@ -570,14 +584,14 @@ TY::Ty *RecordTy::SemAnalyze(TEnvType tenv) const
     TY::Ty *fieldty = tenv->Look(field->typ);
     if (!field)
     {
-      errormsg.Error(this->pos, "undefined type %s", field->typ->Name.c_str());
+      errormsg.Error(this->pos, "undefined type %s", field->typ->Name().c_str());
       tenv->Set(field->typ, TY::VoidTy::Instance());
     }
     TY::Field tyfield = TY::Field(field->name, fieldty);
   }
   TY::FieldList *fieldlistTy = make_fieldlist(tenv, records);
 
-  return &(TY::RecordTy(fieldlistTy));
+  return new TY::RecordTy(fieldlistTy);
 }
 
 TY::Ty *ArrayTy::SemAnalyze(TEnvType tenv) const
@@ -586,11 +600,11 @@ TY::Ty *ArrayTy::SemAnalyze(TEnvType tenv) const
   TY::Ty *arrayty = tenv->Look(this->array);
   if (!arrayty)
   {
-    errormsg.Error(this->pos, "undefined type %s", this->array->Name.c_str());
+    errormsg.Error(this->pos, "undefined type %s", this->array->Name().c_str());
     return TY::VoidTy::Instance();
   }
 
-  return &(TY::ArrayTy(arrayty));
+  return new TY::ArrayTy(arrayty);
 }
 
 } // namespace A
