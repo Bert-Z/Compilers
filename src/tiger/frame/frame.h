@@ -116,6 +116,11 @@ public:
 // %rsp
 TEMP::Temp *F_FP();
 
+// %rax
+TEMP::Temp *F_RV();
+
+T::Exp *externalCall(std::string s,T::ExpList *args);
+
 } // namespace F
 
 #endif

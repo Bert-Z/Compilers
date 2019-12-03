@@ -27,7 +27,7 @@ Frame *Frame::newFrame(TEMP::Label *name, U::BoolList *formals)
   // 相对offset,空出来name的区域
   AccessList *accesslist = makeFormals(formals, WordSize);
 
-  return new Frame(name,accesslist);
+  return new Frame(name, accesslist);
 }
 
 Access *allocLocal(Frame *frame, bool escape)
@@ -44,6 +44,7 @@ Access *allocLocal(Frame *frame, bool escape)
   }
 }
 
+// (level,frame point)-> exp *
 T::Exp *getExp(Access *access, T::Exp *fp)
 {
   if (access->kind == F::Access::Kind::INFRAME)
@@ -56,6 +57,17 @@ T::Exp *getExp(Access *access, T::Exp *fp)
 TEMP::Temp *F_FP()
 {
   return TEMP::Temp::NewTemp();
+}
+
+// %rax
+TEMP::Temp *F_RV()
+{
+  return TEMP::Temp::NewTemp();
+}
+
+T::Exp *F::externalCall(std::string s, T::ExpList *args)
+{
+  return new T::CallExp(new T::NameExp(TEMP::NamedLabel(s)), args);
 }
 
 } // namespace F

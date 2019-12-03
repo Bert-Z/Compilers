@@ -73,6 +73,14 @@ class Exp {
   virtual Cx UnCx() const = 0;
 };
 
+class ExpList {
+  public:
+    Exp *head;
+    ExpList *tail;
+
+    ExpList(Exp *head,ExpList *tail):head(head),tail(tail){}
+}
+
 class ExpAndTy {
  public:
   TR::Exp *exp;
@@ -123,6 +131,13 @@ PatchList *join_patch(PatchList *first, PatchList *second);
 Level* Outermost();
 
 F::FragList* TranslateProgram(A::Exp*);
+
+T::Stm *procEntryExit(Exp *body,Level *level,AccessList *formals);
+
+void functionDec(TR::Exp *exp,TR::Level *level);
+
+TR::Exp *Tr_SimpleVar(TR::Access *access,TR::Level *level);
+TR::Exp *Tr_Assign(TR::Exp *var, TR::Exp *exp);
 
 }  // namespace TR
 
