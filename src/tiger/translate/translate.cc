@@ -170,7 +170,7 @@ Level *Outermost()
 F::FragList *TranslateProgram(A::Exp *root)
 {
   // TODO: Put your codes here (lab5).
-
+  
   return nullptr;
 }
 
@@ -614,8 +614,7 @@ static TR::Exp *Tr_Seq(TR::Exp *left, TR::Exp *right)
   return new TR::ExExp(e);
 }
 
-// unfinish
-// not sure
+// finish
 TR::ExpAndTy SeqExp::Translate(S::Table<E::EnvEntry> *venv,
                                S::Table<TY::Ty> *tenv, TR::Level *level,
                                TEMP::Label *label) const
@@ -635,11 +634,17 @@ TR::ExpAndTy SeqExp::Translate(S::Table<E::EnvEntry> *venv,
   for (; explist; explist = explist->tail)
   {
     expty = explist->head->Translate(venv, tenv, level, label).ty;
+    e2 = explist->head->Translate(venv, tenv, level, label).exp;
+    e1 = Tr_seqExp(e1, e2);
   }
 
-  T::Exp *exp = new T::EseqExp(e1->UnNx(), e2->UnEx());
+  return TR::ExpAndTy(e1, expty);
+}
 
-  return TR::ExpAndTy(nullptr, expty);
+TR::Exp *Tr_seqExp(TR::Exp *e1, TR::Exp *e2)
+{
+  T::Exp *exp = new T::EseqExp(e1->UnNx(), e2->UnEx());
+  return new TR::ExExp(exp);
 }
 
 TR::Exp *Tr_SimpleVar(TR::Access *access, TR::Level *level)
