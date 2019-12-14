@@ -55,6 +55,13 @@ class LabelList {
   LabelList(Label *h, LabelList *t) : head(h), tail(t) {}
 };
 
+/* 判断temp是否在templist中 */
+bool Temp_inTempList(Temp* h, TempList* t);
+
+/* 两个templist的并操作 */
+TempList* unionTempList(TempList* t1, TempList* t2);
+
+
 }  // namespace TEMP
 
 #endif
