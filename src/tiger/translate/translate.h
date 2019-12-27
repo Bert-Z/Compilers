@@ -4,12 +4,16 @@
 #include "tiger/absyn/absyn.h"
 #include "tiger/frame/frame.h"
 
+#include "tiger/frame/temp.h"
 /* Forward Declarations */
 namespace A {
 class Exp;
 }  // namespace A
 
 namespace TR {
+
+// need to be declared at first
+class Level;
 
 class Access {
  public:
@@ -33,10 +37,11 @@ class Level {
  public:
   F::Frame *frame;
   Level *parent;
-  // add formals
-  AccessList *formals=nullptr;
+//   // add formals
+//   AccessList *formals=nullptr;
 
   Level(F::Frame *frame, Level *parent) : frame(frame), parent(parent) {}
+  AccessList *Formals(Level *level) { return nullptr; }
 
   static Level *NewLevel(Level *parent, TEMP::Label *name,
                          U::BoolList *formals);
@@ -79,7 +84,7 @@ class ExpList {
     ExpList *tail;
 
     ExpList(Exp *head,ExpList *tail):head(head),tail(tail){}
-}
+};
 
 class ExpAndTy {
  public:
@@ -95,9 +100,9 @@ class ExExp : public Exp {
 
   ExExp(T::Exp *exp) : Exp(EX), exp(exp) {}
 
-  T::Exp *UnEx() const override {}
-  T::Stm *UnNx() const override {}
-  Cx UnCx() const override {}
+  T::Exp *UnEx() const override; 
+  T::Stm *UnNx() const override;
+  Cx UnCx() const override;
 };
 
 class NxExp : public Exp {
@@ -106,9 +111,9 @@ class NxExp : public Exp {
 
   NxExp(T::Stm *stm) : Exp(NX), stm(stm) {}
 
-  T::Exp *UnEx() const override {}
-  T::Stm *UnNx() const override {}
-  Cx UnCx() const override {}
+  T::Exp *UnEx() const override;
+  T::Stm *UnNx() const override;
+  Cx UnCx() const override;
 };
 
 class CxExp : public Exp {
@@ -119,25 +124,14 @@ class CxExp : public Exp {
   CxExp(PatchList *trues, PatchList *falses, T::Stm *stm)
       : Exp(CX), cx(trues, falses, stm) {}
 
-  T::Exp *UnEx() const override {}
-  T::Stm *UnNx() const override {}
-  Cx UnCx() const override {}
+  T::Exp *UnEx() const override;
+  T::Stm *UnNx() const override;
+  Cx UnCx() const override;
 };
-
-void do_patch(PatchList *tList, TEMP::Label *label);
-
-PatchList *join_patch(PatchList *first, PatchList *second);
 
 Level* Outermost();
 
 F::FragList* TranslateProgram(A::Exp*);
-
-T::Stm *procEntryExit(Exp *body,Level *level,AccessList *formals);
-
-void functionDec(TR::Exp *exp,TR::Level *level);
-
-TR::Exp *Tr_SimpleVar(TR::Access *access,TR::Level *level);
-TR::Exp *Tr_Assign(TR::Exp *var, TR::Exp *exp);
 
 }  // namespace TR
 

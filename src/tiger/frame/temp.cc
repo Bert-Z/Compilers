@@ -79,21 +79,4 @@ void Map::DumpMap(FILE *out) {
   }
 }
 
-bool Temp_inTempList(Temp* h, TempList* t)
-{
-  TempList* p;
-  for(p=t; p!=nullptr; p=p->tail)
-    if (p->head==h) return true;
-  return false;
-}
-
-TempList* unionTempList(TempList* t1, TempList* t2){
-  TempList* res = t1;
-	for (; t2; t2 = t2->tail) {
-		if (!Temp_inTempList(t2->head, t1))
-			res = new TempList(t2->head, res);
-	}
-	return res;
-}
-
 }  // namespace TEMP

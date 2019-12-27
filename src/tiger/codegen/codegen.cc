@@ -1,687 +1,406 @@
 #include "tiger/codegen/codegen.h"
+#include "tiger/translate/translate.h"
+#include "tiger/frame/temp.h"
+#include "tiger/frame/frame.h"
+#include "stdio.h"
+#include "tiger/translate/tree.h"
+
+#include <iostream>
+#include <sstream>
 
 namespace CG
 {
 
-const int WORD_SIZE = 8;
+static std::string fs;
+static AS::InstrList *instrList = NULL, *cur = NULL;
+static TEMP::Temp *savedrbx, *savedrbp, *savedr12, *savedr13, *savedr14, *savedr15;
 
-AS::InstrList *ilist = nullptr;
-AS::InstrList *last = nullptr;
-F::Frame *frame = nullptr;
-
-/* 构造寄存器链 */
 TEMP::TempList *L(TEMP::Temp *h, TEMP::TempList *t)
 {
+  assert(h);
   return new TEMP::TempList(h, t);
 }
-
-/* 将后面要返回的指令登记在指令表中 */
-void emit(AS::Instr *inst)
+static void emit(AS::Instr *inst)
 {
-  if (last != nullptr)
+
+  if (instrList == NULL)
   {
-    last->tail = new AS::InstrList(inst, nullptr);
-    last = last->tail;
+    // fprintf(stdout, "init");
+    instrList = new AS::InstrList(inst, NULL);
+    cur = instrList;
   }
   else
   {
-    ilist = new AS::InstrList(inst, nullptr);
-    last = ilist;
+    cur->tail = new AS::InstrList(inst, NULL);
+    cur = cur->tail;
   }
 }
-
-void munchStm(T::Stm *s)
+static TEMP::Temp *munchOpExp(T::BinopExp *exp)
 {
-  std::string inst;
+  TEMP::Temp *left = munchExp(exp->left), *right = munchExp(exp->right);
+  TEMP::Temp *r = TEMP::Temp::NewTemp();
 
-  switch (s->kind)
+  std::string op;
+  switch (exp->op)
   {
-  // store
-  case T::Stm::MOVE:
+  case T::MUL_OP:
   {
-    /* struct {T_exp dst, src;} MOVE; */
-    T::Exp *src = ((T::MoveStm *)s)->src;
-    T::Exp *dst = ((T::MoveStm *)s)->dst;
+    emit(new AS::MoveInstr("movq `s0, `d0", L(r, NULL), L(left, NULL)));
+    emit(new AS::OperInstr("imulq `s0,`d0", L(r, NULL), L(right, NULL), new AS::Targets(nullptr)));
 
-    // didn't consider e1temp==F::F_FP()
-    /* T_MOVE: 
-        movq src, mem
-    */
-    if (dst->kind == T::Exp::MEM)
-    {
-      /* case 1 : MOVE(MEM(BINOP(PLUS,e1,CONST(i))), e2) */
-      if (((T::MemExp *)dst)->exp->kind == T::Exp::BINOP && ((T::BinopExp *)((T::MemExp *)dst)->exp)->op == T::BinOp::PLUS_OP && ((T::BinopExp *)((T::MemExp *)dst)->exp)->right->kind == T::Exp::CONST)
-      {
-        T::Exp *e1 = ((T::BinopExp *)((T::MemExp *)dst)->exp)->left;
-        T::Exp *e2 = src;
-        TEMP::Temp *e2temp = munchExp(e2);
-        TEMP::Temp *e1temp = munchExp(e1);
-
-        if (e1temp == F::F_FP())
-        {
-          inst = " movq `s1, ?" + std::to_string(((T::ConstExp *)((T::BinopExp *)((T::MemExp *)dst)->exp)->right)->consti) + "#(`s0)";
-        }
-        else
-        {
-          inst = " movq `s1, " + std::to_string(((T::ConstExp *)((T::BinopExp *)((T::MemExp *)dst)->exp)->right)->consti) + "(`s0)";
-        }
-
-        emit(new AS::OperInstr(inst, nullptr, L(e1temp, L(e2temp, nullptr)), nullptr));
-        return;
-      }
-      /* case 2 : MOVE(MEM(BINOP(PLUS,CONST(i),e1)), e2) */
-      else if (((T::MemExp *)dst)->exp->kind == T::Exp::BINOP && ((T::BinopExp *)((T::MemExp *)dst)->exp)->op == T::BinOp::PLUS_OP && ((T::BinopExp *)((T::MemExp *)dst)->exp)->left->kind == T::Exp::CONST)
-      {
-        T::Exp *e1 = ((T::BinopExp *)((T::MemExp *)dst)->exp)->right;
-        T::Exp *e2 = src;
-        TEMP::Temp *e2temp = munchExp(e2);
-        TEMP::Temp *e1temp = munchExp(e1);
-
-        if (e1temp == F::F_FP())
-        {
-          inst = " movq `s1, ?" + std::to_string(((T::ConstExp *)((T::BinopExp *)((T::MemExp *)dst)->exp)->left)->consti) + "#(`s0)";
-        }
-        else
-        {
-          inst = " movq `s1, " + std::to_string(((T::ConstExp *)((T::BinopExp *)((T::MemExp *)dst)->exp)->left)->consti) + "(`s0)";
-        }
-
-        emit(new AS::OperInstr(inst, nullptr, L(e1temp, L(e2temp, nullptr)), nullptr));
-        return;
-      }
-      /* case 3 : MOVE(MEM(e1), MEM(e2)) */
-      else if (src->kind == T::Exp::MEM)
-      {
-        T::Exp *e1 = ((T::MemExp *)dst)->exp;
-        T::Exp *e2 = ((T::MemExp *)src)->exp;
-        TEMP::Temp *r = TEMP::Temp::NewTemp();
-        TEMP::Temp *e2temp = munchExp(e2);
-        TEMP::Temp *e1temp = munchExp(e1);
-
-        // r = MEM(e2)
-        if (e2temp == F::F_FP())
-        {
-          inst = " movq ?0#(`s0), `d0";
-        }
-        else
-        {
-          inst = " movq (`s0), `d0";
-        }
-
-        emit(new AS::OperInstr(inst, L(r, nullptr), L(e2temp, nullptr), nullptr));
-
-        // MOVE(MEM(e1),r)
-        if (e1temp == F::F_FP())
-        {
-          inst = " movq `s0, ?0#(`s1)";
-        }
-        else
-        {
-          inst = " movq `s0, (`s1)";
-        }
-        emit(new AS::OperInstr(inst, nullptr, L(r, L(e1temp, nullptr)), nullptr));
-
-        return;
-      }
-      /* case 4 : MOVE(MEM(CONST(i)), e2) */
-      else if (((T::MemExp *)dst)->exp->kind == T::Exp::CONST)
-      {
-        T::Exp *e2 = src;
-        TEMP::Temp *e2temp = munchExp(e2);
-
-        inst = " movq ` s0, (" + std::to_string(((T::ConstExp *)((T::MemExp *)dst)->exp)->consti) + ")";
-        emit(new AS::OperInstr(inst, nullptr, L(e2temp, nullptr), nullptr));
-
-        return;
-      }
-      /* case 5 : MOVE(MEM(e1), e2) */
-      else
-      {
-        T::Exp *e1 = ((T::MemExp *)dst)->exp;
-        T::Exp *e2 = src;
-        TEMP::Temp *e2temp = munchExp(e2);
-        TEMP::Temp *e1temp = munchExp(e1);
-
-        if (e1temp == F::F_FP())
-        {
-          inst = " movq `s1, ?0#(`s0)";
-        }
-        else
-        {
-          inst = " movq `s1, (`s0)";
-        }
-        emit(new AS::OperInstr(inst, nullptr, L(e1temp, L(e2temp, nullptr)), nullptr));
-
-        return;
-      }
-    }
-    /* T_MOVE: MOVE(TEMP(i), e2)
-        movq src, dst
-    */
-    else if (dst->kind == T::Exp::TEMP)
-    {
-      T::Exp *e2 = src;
-      TEMP::Temp *e2temp = munchExp(e2);
-      TEMP::Temp *e1temp = ((T::TempExp *)dst)->temp;
-
-      // leaq 16(%rsp), %rax; movq %rax, (%rsp)
-      // before call, pass static link
-      if (e2temp == F::F_FP())
-      {
-        inst = " leaq ?0#(`s0), `d0";
-      }
-      else
-      {
-        inst = " movq `s0, `d0";
-      }
-
-      emit(new AS::MoveInstr(inst, L(e1temp, nullptr), L(e2temp, nullptr)));
-
-      return;
-    }
+    return r;
   }
-  /* 
-  * T_JUMP: while,for
-  * jmp .L
-  */
-  case T::Stm::JUMP:
+  case T::DIV_OP:
   {
-    /* struct {T_exp exp; Temp_labelList jumps;} JUMP; */
-    TEMP::LabelList *jumps = ((T::JumpStm *)s)->jumps;
-    inst = " jmp `j0";
-    emit(new AS::OperInstr(inst, nullptr, nullptr, new AS::Targets(jumps)));
-
-    return;
+    TEMP::TempList *divident = L(F::F_RAX(), L(F::F_RDX(), NULL));
+    emit(new AS::MoveInstr("movq `s0, `d0", L(F::F_RAX(), NULL), L(left, NULL)));
+    emit(new AS::OperInstr("cltd", NULL, NULL, new AS::Targets(nullptr)));
+    emit(new AS::OperInstr("idivq `s0", NULL,
+                           L(right, NULL), new AS::Targets((NULL))));
+    emit(new AS::MoveInstr("movq `s0, `d0", L(r, NULL), L(F::F_RAX(), NULL)));
+    return r;
   }
-  /* 
-  * T_CJUMP: if
-  * cmp src0, src1
-  * jle .L
-  */
-  case T::Stm::CJUMP:
+  case T::PLUS_OP:
+    op = "addq ";
+    if (exp->left->kind == T::Exp::TEMP && left == F::F_FP() && exp->right->kind == T::Exp::CONST)
+    {
+      int rightvalue = ((T::ConstExp *)(exp->right))->consti;
+      std::string instr;
+      std::stringstream ioss;
+      ioss << "leaq (" + fs + "-0x" << std::hex << -rightvalue << ")(`s0),`d0";
+
+      instr = ioss.str();
+      emit(new AS::OperInstr(instr,
+                             L(r, nullptr), L(F::F_SP(), nullptr), new AS::Targets(NULL)));
+    }
+    else
+    {
+
+      emit(new AS::MoveInstr("movq `s0, `d0",
+                             L(r, NULL), L(left, NULL)));
+      emit(new AS::OperInstr(op + "`s0, `d0", L(r, nullptr),
+                             L(right, L(r, nullptr)), new AS::Targets((NULL))));
+    }
+    return r;
+    break;
+  case T::MINUS_OP:
   {
-    /* struct {T_relOp op; T_exp left, right; Temp_label true, false;} CJUMP; */
-    TEMP::Temp *left = munchExp(((T::CjumpStm *)s)->left);
-    TEMP::Temp *right = munchExp(((T::CjumpStm *)s)->right);
-    TEMP::Label *trues = ((T::CjumpStm *)s)->true_label;
-    TEMP::Label *falses = ((T::CjumpStm *)s)->false_label;
-
-    std::string oper = "";
-    switch (((T::CjumpStm *)s)->op)
-    {
-    case T::RelOp::EQ_OP:
-    {
-      oper = "je";
-      break;
-    }
-    case T::RelOp::NE_OP:
-    {
-      oper = "jne";
-      break;
-    }
-    case T::RelOp::LT_OP:
-    {
-      oper = "jl";
-      break;
-    }
-    case T::RelOp::GT_OP:
-    {
-      oper = "jg";
-      break;
-    }
-    case T::RelOp::LE_OP:
-    {
-      oper = "jle";
-      break;
-    }
-    case T::RelOp::GE_OP:
-    {
-      oper = "jge";
-      break;
-    }
-    case T::RelOp::ULT_OP:
-    {
-      oper = "jb";
-      break;
-    }
-    case T::RelOp::UGT_OP:
-    {
-      oper = "ja";
-      break;
-    }
-    case T::RelOp::ULE_OP:
-    {
-      oper = "jbe";
-      break;
-    }
-    case T::RelOp::UGE_OP:
-    {
-      oper = "jae";
-      break;
-    }
-    default:
-      // cannot reach here
-      assert(0);
-    }
-
-    /* ZF, SF, OF, CF */
-    /* eg: left > right, cmpq left, right, set SF=1, jl/jle is ok */
-    inst = " cmpq `s1, `s0";
-    emit(new AS::OperInstr(inst, nullptr, L(left, L(right, nullptr)), nullptr));
-
-    inst = " " + oper + " `j0";
-    emit(new AS::OperInstr(inst, nullptr, nullptr, new AS::Targets(new TEMP::LabelList(trues, new TEMP::LabelList(falses, nullptr)))));
-
-    return;
+    op = "subq ";
+    emit(new AS::MoveInstr("movq `s0, `d0",
+                           L(r, NULL), L(left, NULL)));
+    emit(new AS::OperInstr(op + "`s0, `d0", L(r, nullptr),
+                           L(right, L(r, nullptr)), new AS::Targets((NULL))));
+    return r;
+    break;
   }
-  /* 
-  * T_LABEL: if,while,for
-  * Label: 
-  */
-  case T::Stm::LABEL:
-  {
-    /* Temp_label LABEL; */
-    TEMP::Label *label = ((T::LabelStm *)s)->label;
-    inst = TEMP::LabelString(label);
-    emit(new AS::LabelInstr(inst, label));
-    return;
-  }
-  /* T_SEQ: */
-  case T::Stm::SEQ:
-  {
-    /* union {struct {T_stm left, right;} SEQ; */
-    munchStm(((T::SeqStm *)s)->left);
-    munchStm(((T::SeqStm *)s)->right);
-    return;
-  }
-  /* T_EXP: */
-  case T::Stm::EXP:
-  {
-    /* T_exp EXP; */
-    munchExp(((T::ExpStm *)s)->exp);
-    return;
-  }
+
   default:
+
     assert(0);
   }
+  assert(0);
+  return nullptr;
 }
-
-/*
- * 翻译call时使用的参数
- */
-TEMP::TempList *munchArgs(int cnt, T::ExpList *args)
+static TEMP::Temp *munchConstExp(T::ConstExp *exp)
 {
-  if (!args)
-    return nullptr;
 
-  std::string inst;
-  TEMP::Temp *src = munchExp(args->head);
-
-  /* use register pass argument */
-  if (cnt > 6)
-  {
-    TEMP::TempList *argregs = F::F_Argregs();
-    TEMP::Temp *dst = F::F_Arg(cnt);
-
-    inst = " movq `s0, `d0";
-    emit(new AS::MoveInstr(inst, L(dst, nullptr), L(munchExp(args->head), nullptr)));
-
-    return L(dst, munchArgs(cnt + 1, args->tail));
-  }
-  /* use stack pass argument */
-  else
-  {
-    inst = " movq `s0, " + std::to_string((cnt - 6) * WORD_SIZE) + "(%rsp)";
-    emit(new AS::MoveInstr(inst, nullptr, L(src, L(F::F_RSP(), nullptr))));
-    return munchArgs(cnt + 1, args->tail);
-  }
+  TEMP::Temp *r = TEMP::Temp::NewTemp();
+  emit(new AS::OperInstr("movq $" + std::to_string(exp->consti) + " ,`d0",
+                         L(r, nullptr),
+                         NULL, NULL));
+  return r;
 }
-
-/*
- * 翻译T_exp类型，返回Temp_temp
- */
-TEMP::Temp *munchExp(T::Exp *e)
+static TEMP::Temp *munchMemExp(T::MemExp *exp)
 {
-  std::string str;
-  std::string inst;
-
+  T::Exp *e = exp->exp;
+  TEMP::Temp *r = TEMP::Temp::NewTemp();
   switch (e->kind)
   {
-  /* load */
-  case T::Exp::MEM:
-  {
-    /* T_exp MEM; */
-    TEMP::Temp *r = TEMP::Temp::NewTemp();
-
-    /* MEM(BINOP(PLUS, e1, CONST(i)))*/
-    if (((T::MemExp *)e)->exp->kind == T::Exp::BINOP && ((T::BinopExp *)((T::MemExp *)e)->exp)->op == T::BinOp::PLUS_OP && ((T::BinopExp *)((T::MemExp *)e)->exp)->right->kind == T::Exp::CONST)
-    {
-      T::Exp *e1 = ((T::BinopExp *)((T::MemExp *)e)->exp)->left;
-      T::Exp *e2 = ((T::BinopExp *)((T::MemExp *)e)->exp)->right;
-      TEMP::Temp *e1temp = munchExp(e1);
-
-      if (e1temp == F::F_FP())
-      {
-        inst = " movq ?" + std::to_string(((T::ConstExp *)e2)->consti) + "#(`s0), `d0";
-      }
-      else
-      {
-        inst = " movq " + std::to_string(((T::ConstExp *)e2)->consti) + "(`s0), `d0";
-      }
-      emit(new AS::OperInstr(inst, L(r, nullptr), L(e1temp, nullptr), nullptr));
-    }
-    /* MEM(BINOP(PLUS, CONST(i), e1))*/
-    else if (((T::MemExp *)e)->exp->kind == T::Exp::BINOP && ((T::BinopExp *)((T::MemExp *)e)->exp)->op == T::BinOp::PLUS_OP && ((T::BinopExp *)((T::MemExp *)e)->exp)->left->kind == T::Exp::CONST)
-    {
-      T::Exp *e1 = ((T::BinopExp *)((T::MemExp *)e)->exp)->right;
-      T::Exp *e2 = ((T::BinopExp *)((T::MemExp *)e)->exp)->left;
-      TEMP::Temp *e1temp = munchExp(e1);
-
-      if (e1temp == F::F_FP())
-      {
-        inst = " movq ?" + std::to_string(((T::ConstExp *)e2)->consti) + "#(`s0), `d0";
-      }
-      else
-      {
-        inst = " movq " + std::to_string(((T::ConstExp *)e2)->consti) + "(`s0), `d0";
-      }
-
-      emit(new AS::OperInstr(inst, L(r, nullptr), L(e1temp, nullptr), nullptr));
-    }
-    /* MEM(CONST(i)) */
-    else if (((T::MemExp *)e)->exp->kind == T::Exp::CONST)
-    {
-      T::Exp *e1 = ((T::MemExp *)e)->exp;
-
-      inst = " movq " + std::to_string(((T::ConstExp *)e1)->consti) + ", `d0";
-      emit(new AS::OperInstr(inst, L(r, nullptr), nullptr, nullptr));
-    }
-    /* MEM(e1) */
-    else
-    {
-      T::Exp *e1 = ((T::MemExp *)e)->exp;
-      TEMP::Temp *e1temp = munchExp(e1);
-
-      if (e1temp == F::F_FP())
-      {
-        inst = " movq ?0#(`s0), `d0";
-      }
-      else
-      {
-        inst = " movq (`s0), `d0";
-      }
-
-      emit(new AS::OperInstr(inst, L(r, nullptr), L(e1temp, nullptr), nullptr));
-    }
-
-    return r;
-  }
   case T::Exp::BINOP:
   {
-    T::BinopExp *ee = (T::BinopExp *)e;
-
-    switch (ee->op)
+    T::Exp *left = ((T::BinopExp *)e)->left;
+    T::Exp *right = ((T::BinopExp *)e)->right;
+    if (left->kind == T::Exp::TEMP && ((T::TempExp *)left)->temp == F::F_FP())
     {
-    /* T_Binop: a + b
-        movq left, dst
-        addq right, dst
-    */
-    case T::BinOp::PLUS_OP:
-    {
-      TEMP::Temp *temp = TEMP::Temp::NewTemp();
+      assert(right->kind == T::Exp::CONST);
+      int offset = ((T::ConstExp *)right)->consti;
+      std::string instr;
+      std::stringstream ioss;
+      ioss << "#BINOP F_FP munch mem\nmovq (" + fs + "-0x" << std::hex << -offset << ")(`s0),`d0";
 
-      if (ee->right->kind == T::Exp::CONST)
-      {
-        T::Exp *e1 = ee->left;
-        TEMP::Temp *possible_fp = munchExp(e1);
-        if (possible_fp == F::F_FP())
-        {
-          str = " leaq ?0#(`s0), `d0";
-        }
-        else
-        {
-          str = " movq `s0, `d0";
-        }
-        emit(new AS::MoveInstr(str, L(temp, nullptr), L(possible_fp, nullptr)));
-        str = " addq $" + std::to_string(((T::ConstExp *)ee->right)->consti) + ", `d0";
-        emit(new AS::OperInstr(str, L(temp, nullptr), L(temp, nullptr), nullptr));
-      }
-      else if (ee->left->kind == T::Exp::CONST)
-      {
-        T::Exp *e1 = ee->right;
-        TEMP::Temp *possible_fp = munchExp(e1);
-
-        if (possible_fp == F::F_FP())
-        {
-          str = " leaq ?0#(`s0), `d0";
-        }
-        else
-        {
-          str = " movq `s0, `d0";
-        }
-        emit(new AS::MoveInstr(str, L(temp, nullptr), L(possible_fp, nullptr)));
-        str = " addq $" + std::to_string(((T::ConstExp *)ee->left)->consti) + ", `d0";
-        emit(new AS::OperInstr(str, L(temp, nullptr), L(temp, nullptr), nullptr));
-      }
-      else
-      {
-        T::Exp *e1 = ee->left;
-        T::Exp *e2 = ee->right;
-        TEMP::Temp *possible_fp = munchExp(e1);
-        if (possible_fp == F::F_FP())
-        {
-          str = " leaq ?0#(`s0), `d0";
-        }
-        else
-        {
-          str = " movq `s0, `d0";
-        }
-        emit(new AS::MoveInstr(str, L(temp, nullptr), L(possible_fp, nullptr)));
-        str = " addq `s1, `d0";
-        emit(new AS::OperInstr(str, L(temp, nullptr), L(temp, L(munchExp(e2), nullptr)), nullptr));
-      }
-
-      return temp;
-    }
-    case T::BinOp::MINUS_OP:
-    {
-      TEMP::Temp *temp = TEMP::Temp::NewTemp();
-
-      if (ee->right->kind == T::Exp::CONST)
-      {
-        T::Exp *e1 = ee->left;
-        std::string str;
-        TEMP::Temp *possible_fp = munchExp(e1);
-        if (possible_fp == F::F_FP())
-        {
-          str = " leaq ?0#(`s0), `d0";
-        }
-        else
-        {
-          str = " movq `s0, `d0";
-        }
-
-        emit(new AS::MoveInstr(str, L(temp, nullptr), L(possible_fp, nullptr)));
-        str = " subq $" + std::to_string(((T::ConstExp *)ee->right)->consti) + ", `d0";
-        emit(new AS::OperInstr(str, L(temp, nullptr), nullptr, nullptr));
-      }
-      else
-      {
-        T::Exp *e1 = ee->left;
-        T::Exp *e2 = ee->right;
-        TEMP::Temp *possible_fp = munchExp(e1);
-
-        str = " movq `s0, `d0";
-        emit(new AS::MoveInstr(str, L(temp, nullptr), L(possible_fp, nullptr)));
-        str = " subq `s1, `d0";
-        emit(new AS::OperInstr(str, L(temp, nullptr), L(temp, L(munchExp(e2), nullptr)), nullptr));
-      }
-
-      return temp;
-    }
-    case T::BinOp::MUL_OP:
-    {
-      TEMP::Temp *temp = TEMP::Temp::NewTemp();
-      T::Exp *e1 = ee->left;
-      T::Exp *e2 = ee->right;
-
-      str = " movq `s0, %rax";
-      emit(new AS::MoveInstr(str, L(F::F_RAX(), nullptr), L(munchExp(e1), nullptr)));
-      str = " imulq `s0";
-      emit(new AS::OperInstr(str, L(F::F_RAX(), L(F::F_RDX(), nullptr)), L(munchExp(e2), L(F::F_RAX(), nullptr)), nullptr));
-      str = " movq %rax, `d0";
-      emit(new AS::MoveInstr(str, L(temp, nullptr), L(F::F_RAX(), nullptr)));
-      return temp;
-    }
-      /* T_Binop: a / b
-        movq left, %rax
-        clto            (dst: %rdx:%rax, src: %rax)
-        idivq right     (dst: %rdx:%rax, src: right, %rdx:%rax)
-        movq %rax, r 
-        AS(..., dst, src)
-      */
-    case T::BinOp::DIV_OP:
-    {
-      TEMP::Temp *temp = TEMP::Temp::NewTemp();
-      T::Exp *e1 = ee->left;
-      T::Exp *e2 = ee->right;
-
-      str = " movq `s0, %rax";
-      emit(new AS::MoveInstr(str, L(F::F_RAX(), nullptr), L(munchExp(e1), nullptr)));
-      // clear rdx
-      str = " cqto";
-      emit(new AS::OperInstr(str, L(F::F_RAX(), L(F::F_RDX(), nullptr)), L(F::F_RAX(), nullptr), nullptr));
-      // div operation
-      str = " idivq `s0";
-      emit(new AS::OperInstr(str, L(F::F_RAX(), L(F::F_RDX(), nullptr)),
-                             L(munchExp(e2), L(F::F_RAX(), L(F::F_RDX(), nullptr))), nullptr));
-
-      str = " movq %rax, `d0";
-      emit(new AS::MoveInstr(str, L(temp, nullptr), L(F::F_RAX(), nullptr)));
-      return temp;
-    }
-    default:
-      assert(0);
-    }
-  }
-    /* T_Const: int i = 0
-    * movq $imm, dst
-    */
-  case T::Exp::CONST:
-  {
-    /* int CONST; */
-    TEMP::Temp *r = TEMP::Temp::NewTemp();
-    inst = " movq $" + std::to_string(((T::ConstExp *)e)->consti) + ", `d0";
-    emit(new AS::OperInstr(inst, L(r, nullptr), nullptr, nullptr));
-    return r;
-  }
-  /* T_Temp: %reg */
-  case T::Exp::TEMP:
-  {
-    /* Temp_temp TEMP; */
-    return ((T::TempExp *)e)->temp;
-  }
-    /*  T_Name: char *s = "abc"
-      .L: .string "abc"
-      movq $.L, dst
-      string Temp_labelstring(Temp_label s);
-    */
-  case T::Exp::NAME:
-  {
-    /* Temp_label NAME; */
-    TEMP::Temp *r = TEMP::Temp::NewTemp();
-    inst = " leaq " + TEMP::LabelString(((T::NameExp *)e)->name) + "(%rip), `d0";
-    emit(new AS::OperInstr(inst, L(r, nullptr), nullptr, nullptr));
-    return r;
-  }
-  /* T_Eseq: */
-  case T::Exp::ESEQ:
-  {
-    /* struct {T_stm stm; T_exp exp;} ESEQ; */
-    munchStm(((T::EseqExp *)e)->stm);
-    return munchExp(((T::EseqExp *)e)->exp);
-  }
-  /* T_Call : func(args)
-      pushq argk
-      ...
-      pushq arg7
-      movq arg6, %r9d
-      movq arg5, %r8d
-      movq arg4, %rcx
-      movq arg3, %rdx
-      movq arg2, %rsi
-      movq arg1, %rdi
-      call func
-      movq %rax, dst
-  */
-  case T::Exp::CALL:
-  {
-    /* struct {T_exp fun; T_expList args;} CALL; */
-    T::CallExp *ee = (T::CallExp *)e;
-    TEMP::Label *func = ((T::NameExp *)ee->fun)->name;
-    T::ExpList *args = ee->args;
-    TEMP::Temp *r = TEMP::Temp::NewTemp();
-
-    if (!func)
-      return F::F_RV();
-
-    if (args->head->kind == T::Exp::TEMP)
-    {
-      inst = " leaq ?0#(%rsp), `d0";
-      emit(new AS::OperInstr(inst, L(r, nullptr), L(F::F_RSP(), nullptr), nullptr));
-      inst = " movq `s0, (%rsp)";
-      emit(new AS::OperInstr(inst, nullptr, L(r, L(F::F_RSP(), nullptr)), nullptr));
+      instr = ioss.str();
+      emit(new AS::OperInstr(instr,
+                             L(r, nullptr), L(F::F_SP(), nullptr), new AS::Targets(NULL)));
+      return r;
     }
     else
     {
-      inst = " movq `s0, (%rsp)";
-      emit(new AS::OperInstr(inst, nullptr, L(munchExp(args->head), L(F::F_RSP(), nullptr)), nullptr));
+      TEMP::Temp *lefttemp = munchExp(left);
+      TEMP::Temp *righttemp = munchExp(right);
+      emit(new AS::OperInstr("#BINOP munch mem\naddq `s0,`d0", L(righttemp, NULL),
+                             L(lefttemp, L(righttemp, NULL)), new AS::Targets(NULL)));
+      emit(new AS::OperInstr("#BINOP munch mem\nmovq (`s0),`d0", L(r, NULL), L(righttemp, NULL), new AS::Targets(NULL)));
+      return r;
     }
-
-    //skip static link
-    TEMP::TempList *srcregs = munchArgs(0, args->tail);
-    //keep live in the out
-    TEMP::TempList *dstregs = TEMP::unionTempList(F::F_Argregs(), L(F::F_RV(), F::Callersaves()));
-    inst = " callq " + TEMP::LabelString(func);
-    emit(new AS::OperInstr(inst, dstregs, srcregs, nullptr));
-
-    return F::F_RV();
   }
   default:
-    assert(0);
+  {
+    TEMP::Temp *s = munchExp(e);
+    emit(new AS::MoveInstr("#  munch mem\nmovq (`s0), `d0",
+                           L(r, NULL), L(s, NULL)));
+    return r;
+  }
+  }
+  assert(0);
+  return nullptr;
+}
+static TEMP::Temp *munchNameExp(T::NameExp *exp)
+{
+  TEMP::Temp *r = TEMP::Temp::NewTemp();
+  std::string assem = "leaq " + exp->name->Name() + "(%rip),`d0";
+  emit(new AS::OperInstr(assem,
+                         L(r, NULL), NULL, new AS::Targets(nullptr)));
+  return r;
+}
+static void munchArgs(T::ExpList *list)
+{
+  int num = 1;
+  TEMP::Temp *arg = TEMP::Temp::NewTemp();
+
+  for (T::ExpList *l = list; l; l = l->tail, num++)
+  {
+    arg = munchExp(l->head);
+    switch (num)
+    {
+    case 1:
+      emit(new AS::MoveInstr("#munchArgs \nmovq `s0,`d0", L(F::F_RDI(), NULL), L(arg, NULL)));
+      break;
+    case 2:
+      emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_RSI(), NULL), L(arg, NULL)));
+      break;
+    case 3:
+      emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_RDX(), NULL), L(arg, NULL)));
+      break;
+    case 4:
+      emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_RCX(), NULL), L(arg, NULL)));
+      break;
+    case 5:
+      emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R8(), NULL), L(arg, NULL)));
+      break;
+    case 6:
+      emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R9(), NULL), L(arg, NULL)));
+      break;
+    default:
+      emit(new AS::OperInstr("pushq `s0", NULL, L(arg, NULL), new AS::Targets(nullptr)));
+      break;
+    }
   }
 }
 
-AS::InstrList *Codegen(F::Frame *f, T::StmList *stmList)
+int TempListLength(TEMP::TempList *l)
+{
+  if (!l)
+    return 0;
+  return TempListLength(l->tail) + 1;
+}
+
+static TEMP::Temp *munchCallExp(T::CallExp *exp)
 {
 
-  AS::InstrList *list;
-  T::StmList *sl;
-  frame = f;
+  T::Exp *func_exp = ((exp)->fun);
+  assert(func_exp->kind == T::Exp::NAME);
 
-  std::string prologue, epilogue;
+  TEMP::Label *func = ((T::NameExp *)func_exp)->name;
 
-  // prologue
-  prologue = " subq $?0#, %rsp";
-  emit(new AS::OperInstr(prologue, L(F::F_RSP(), nullptr), L(F::F_RSP(), nullptr), nullptr));
+  std::string func_name = TEMP::LabelString(((T::NameExp *)func_exp)->name);
 
-  // function body
-  for (sl = stmList; sl; sl = sl->tail)
-    munchStm(sl->head);
+  T::ExpList *args = (exp)->args;
+  munchArgs(args);
 
-  // epilogue
-  epilogue = " addq $?0#, %rsp";
-  emit(new AS::OperInstr(epilogue, L(F::F_RSP(), nullptr), L(F::F_RSP(), nullptr), nullptr));
+  std::string assem = "call " + func_name;
+  emit(new AS::OperInstr(assem, F::F_callerSaveRegs(), nullptr, new AS::Targets(NULL)));
 
-  list = ilist;
-  last = nullptr;
-  ilist = last;
+  TEMP::Temp *r = TEMP::Temp::NewTemp();
+  emit(new AS::MoveInstr("#return value\nmovq `s0, `d0", L(r, NULL),
+                         L(F::F_RAX(), NULL)));
 
-  // retq
-  ilist = F::F_procEntryExit2(f, ilist);
-  frame = nullptr;
+  return r;
+}
+static TEMP::Temp *munchExp(T::Exp *exp)
+{
+  switch (exp->kind)
+  {
+  case T::Exp::BINOP:
+  {
+    return munchOpExp((T::BinopExp *)exp);
+  }
+  case T::Exp::MEM:
+  {
+    return munchMemExp((T::MemExp *)exp);
+  }
+  case T::Exp::TEMP:
+  {
+    TEMP::Temp *t = ((T::TempExp *)exp)->temp;
+    if (t == F::F_FP())
+    {
 
-  return list;
+      std::string inst = "leaq " + fs + "(`s0),`d0";
+      t = TEMP::Temp::NewTemp();
+      emit(new AS::OperInstr(inst, L(t, NULL), L(F::F_SP(), NULL), new AS::Targets(NULL)));
+    }
+    return t;
+  }
+  case T::Exp::ESEQ:
+  {
+    assert(0);
+  }
+  case T::Exp::NAME:
+  {
+    return munchNameExp((T::NameExp *)exp);
+  }
+  case T::Exp::CONST:
+  {
+    return munchConstExp((T::ConstExp *)exp);
+  }
+  case T::Exp::CALL:
+  {
+    return munchCallExp((T::CallExp *)exp);
+  }
+  }
+}
+static void munchMoveStm(T::MoveStm *stm)
+{
+  T::Exp *dst = stm->dst;
+  T::Exp *src = stm->src;
+  /*movq mem,reg; movq reg,mem; movq irr,mem; movq reg,reg*/
+  if (dst->kind == T::Exp::TEMP)
+  {
+
+    TEMP::Temp *left = munchExp(src);
+    emit(new AS::MoveInstr("movq `s0, `d0",
+                           L(((T::TempExp *)dst)->temp, NULL),
+                           L(left, NULL)));
+    return;
+  }
+  if (dst->kind == T::Exp::MEM)
+  {
+
+    TEMP::Temp *left = munchExp(src);
+
+    TEMP::Temp *right = munchExp(((T::MemExp *)dst)->exp);
+    emit(new AS::MoveInstr("movq `s0, (`s1)", NULL,
+                           L(left, L(right, NULL))));
+    return;
+  }
+}
+static void munchLabelStm(T::LabelStm *stm)
+{
+  TEMP::Label *label = stm->label;
+  emit(new AS::LabelInstr(label->Name(), label));
+}
+static void munchStm(T::Stm *stm)
+{
+  switch (stm->kind)
+  {
+  /*movq mem,reg; movq reg,mem; movq irr,mem; movq reg,reg*/
+  /* need to munch src exp first */
+  case T::Stm::MOVE:
+  {
+    return munchMoveStm((T::MoveStm *)stm);
+  }
+  case T::Stm::LABEL:
+  {
+    return munchLabelStm((T::LabelStm *)stm);
+  }
+  case T::Stm::CJUMP:
+  {
+    std::string op;
+    TEMP::Temp *left = munchExp(((T::CjumpStm *)stm)->left);
+    TEMP::Temp *right = munchExp(((T::CjumpStm *)stm)->right);
+    TEMP::Label *true_label = ((T::CjumpStm *)stm)->true_label;
+    switch (((T::CjumpStm *)stm)->op)
+    {
+    case T::EQ_OP:
+      op = "je ";
+      break;
+    case T::NE_OP:
+      op = "jne ";
+      break;
+    case T::LT_OP:
+      op = "jl ";
+      break;
+    case T::GT_OP:
+      op = "jg ";
+      break;
+    case T::LE_OP:
+      op = "jle ";
+      break;
+    case T::GE_OP:
+      op = "jge ";
+      break;
+    }
+    emit(new AS::OperInstr("cmp `s0,`s1", NULL,
+                           L(right, L(left, NULL)),
+                           new AS::Targets(NULL)));
+
+    emit(new AS::OperInstr(op + TEMP::LabelString(true_label), NULL, NULL,
+                           new AS::Targets(new TEMP::LabelList(true_label, NULL))));
+    return;
+  }
+  case T::Stm::JUMP:
+  {
+    std::string label = ((T::NameExp *)(((T::JumpStm *)stm)->exp))->name->Name();
+    emit(new AS::OperInstr("jmp " + label, NULL, NULL,
+                           new AS::Targets(((T::JumpStm *)stm)->jumps)));
+    return;
+  }
+  case T::Stm::EXP:
+  {
+    munchExp(((T::ExpStm *)stm)->exp);
+    return;
+  }
+  }
+}
+
+static void saveCalleeRegs()
+{
+
+  savedrbx = TEMP::Temp::NewTemp();
+  savedrbp = TEMP::Temp::NewTemp(); //Saved rbp here.
+  savedr12 = TEMP::Temp::NewTemp();
+  savedr13 = TEMP::Temp::NewTemp();
+  savedr14 = TEMP::Temp::NewTemp();
+  savedr15 = TEMP::Temp::NewTemp();
+  emit(new AS::MoveInstr("#saveCalleeRegs\nmovq `s0,`d0", L(savedrbx, NULL), L(F::F_RBX(), NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(savedrbp, NULL), L(F::F_RBP(), NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(savedr12, NULL), L(F::F_R12(), NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(savedr13, NULL), L(F::F_R13(), NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(savedr14, NULL), L(F::F_R14(), NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(savedr15, NULL), L(F::F_R15(), NULL)));
+}
+static void restoreCalleeRegs(void)
+{
+  emit(new AS::MoveInstr("#restoreCalleeRegs\nmovq `s0,`d0", L(F::F_RBX(), NULL), L(savedrbx, NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_RBP(), NULL), L(savedrbp, NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R12(), NULL), L(savedr12, NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R13(), NULL), L(savedr13, NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R14(), NULL), L(savedr14, NULL)));
+  emit(new AS::MoveInstr("movq `s0,`d0", L(F::F_R15(), NULL), L(savedr15, NULL)));
+}
+AS::InstrList *Codegen(F::Frame *f, T::StmList *stmList)
+{
+  // TODO: Put your codes here (lab6).
+  fs = TEMP::LabelString(f->label) + "_framesize";
+  instrList = NULL;
+  //saveCalleeRegs();
+  //push reg in stack
+  for (; stmList; stmList = stmList->tail)
+  {
+    munchStm(stmList->head);
+  }
+
+  //restoreCalleeRegs();
+  return F::F_procEntryExit2(instrList);
 }
 
 } // namespace CG

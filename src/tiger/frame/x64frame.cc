@@ -1,392 +1,348 @@
 #include "tiger/frame/frame.h"
 
+#include <iostream>
+#include <sstream>
 #include <string>
 
 namespace F
 {
 
-// Word size
-static const int WordSize = 8;
+static TEMP::Temp *rbp = NULL;
+static TEMP::Temp *rax = NULL;
+static TEMP::Temp *rdi = NULL;
+static TEMP::Temp *rsi = NULL;
+static TEMP::Temp *rdx = NULL;
+static TEMP::Temp *rcx = NULL;
+static TEMP::Temp *r8 = NULL;
+static TEMP::Temp *r9 = NULL;
+
+static TEMP::Temp *r10 = NULL;
+static TEMP::Temp *r11 = NULL;
+static TEMP::Temp *r12 = NULL;
+static TEMP::Temp *r13 = NULL;
+static TEMP::Temp *r14 = NULL;
+static TEMP::Temp *r15 = NULL;
+
+static TEMP::Temp *rsp = NULL;
+static TEMP::Temp *rbx = NULL;
 
 class X64Frame : public Frame
 {
+public:
   // TODO: Put your codes here (lab6).
+  X64Frame(TEMP::Label *label,
+           F::AccessList *formals,
+           F::AccessList *locals,
+           T::StmList *view_shift, int s_offset)
+      : Frame(label, formals, locals, view_shift, s_offset) {}
 };
 
-// generate F::AccessList 参数链
-static AccessList *makeFormals(U::BoolList *formals, int offset)
+Frame *F_newFrame(TEMP::Label *name, U::BoolList *escapes)
 {
-  if (formals)
-    return new AccessList(new InFrameAccess(offset), makeFormals(formals->tail, offset + WordSize));
-  else
-    return nullptr;
+  F::AccessList *formals = new AccessList(nullptr, nullptr);
+  T::StmList *view_shift = new T::StmList(nullptr, nullptr);
+
+  T::StmList *v_tail = view_shift;
+  F::AccessList *f_tail = formals;
+  bool escape;
+  TEMP::Temp *temp = TEMP::Temp::NewTemp();
+
+  int formal_off = wordsize; // The seventh arg was located at 8(%rbp)
+  
+  X64Frame *newframe = new X64Frame(name, NULL, NULL, NULL, -8);
+
+  int num = 0; //the num of formals
+  
+  /*If the formal is escape, then allocate it on the frame.
+	  Else,allocate it on the temp.*/
+  for (; escapes; escapes = escapes->tail, num++)
+  {
+    escape = escapes->head;
+    if (escape)
+    {
+      switch (num)
+      {
+      case 0:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_RDI())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      case 1:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_RSI())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      case 2:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_RDX())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      case 3:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_RCX())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      case 4:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_R8())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      case 5:
+        v_tail->tail = new T::StmList(new T::MoveStm(
+                                          new T::MemExp(
+                                              new T::BinopExp(
+                                                  T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
+                                          new T::TempExp(F_R9())),
+                                      NULL);
+        newframe->s_offset -= wordsize;
+        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
+        f_tail = f_tail->tail;
+        v_tail = v_tail->tail;
+        break;
+      default:
+      {
+        f_tail->tail = new AccessList(new F::InFrameAccess(formal_off), NULL); //sequence of formals here is reversed.
+        f_tail = f_tail->tail;
+        formal_off += wordsize;
+      }
+      }
+    }
+    else
+    {
+      //allocate it on the temp
+    }
+  }
+
+  newframe = new X64Frame(name, formals->tail, NULL, view_shift->tail, newframe->s_offset);
+  return newframe;
 }
 
-Frame *Frame::newFrame(TEMP::Label *name, U::BoolList *formals)
+T::Stm *F_procEntryExit1(Frame *frame, T::Stm *stm)
 {
-  // 相对offset,空出来name的区域
-  AccessList *accesslist = makeFormals(formals, WordSize);
+  //debug
+  FILE *out = stdout;
+  frame->view_shift->Print(out);
 
-  return new Frame(name, accesslist);
+  printf("------====view_shift=====-------\n");
+
+  T::StmList *iter = frame->view_shift;
+  T::SeqStm *res = new T::SeqStm(stm, new T::ExpStm(new T::ConstExp(0)));
+  while (iter && iter->head)
+  {
+    res = new T::SeqStm(iter->head, res);
+    iter = iter->tail;
+  }
+  return res;
 }
 
-Access *allocLocal(Frame *frame, bool escape)
+AS::InstrList *F_procEntryExit2(AS::InstrList *body)
 {
+
+  static TEMP::TempList *returnSink = NULL;
+  if (!returnSink)
+    returnSink = new TEMP::TempList(F::F_SP(), new TEMP::TempList(F::F_RAX(), NULL));
+  return AS::InstrList::Splice(body, new AS::InstrList(new AS::OperInstr("#exit2", NULL, returnSink, NULL), NULL));
+}
+AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *inst)
+{
+  std::string fs = TEMP::LabelString(frame->label) + "_framesize";
+
+  std::string prolog;
+  std::stringstream ioss;
+  ioss << "#exit3\n .set " + fs + ",0x" << std::hex << -frame->s_offset << "\n";
+  ioss << "subq $0x" << std::hex << -frame->s_offset << ",%rsp\n";
+
+  prolog = ioss.str();
+
+  std::stringstream ios;
+  ios << "addq $0x" << std::hex << -frame->s_offset << ",%rsp\nret\n\n";
+
+  std::string epilog = ios.str();
+  return new AS::Proc(prolog, inst, epilog);
+}
+
+F::Access *F_allocLocal(Frame *frame, bool escape)
+{
+  F::Access *local;
   if (escape)
   {
-    (frame->size)++;
-    int offset = -(frame->size * WordSize);
-    return new InFrameAccess(offset);
+    local = new F::InFrameAccess(frame->s_offset);
+    frame->s_offset -= wordsize;
   }
   else
   {
-    return new InRegAccess(TEMP::Temp::NewTemp());
+    local = new F::InRegAccess(TEMP::Temp::NewTemp());
   }
+  return local;
 }
 
-// (level,frame point)-> exp *
-T::Exp *getExp(Access *access, T::Exp *fp)
-{
-  if (access->kind == F::Access::Kind::INFRAME)
-    return new T::MemExp(new T::BinopExp(T::BinOp::PLUS_OP, fp, new T::ConstExp(((InFrameAccess *)access)->offset)));
-  else
-    return new T::TempExp(((InRegAccess *)access)->reg);
-}
-
-// %rsp
-TEMP::Temp *F_FP()
-{
-  return F_RSP();
-}
-
-// %rax
-TEMP::Temp *F_RV()
-{
-  return F_RAX();
-}
-
-T::Exp *F::externalCall(std::string s, T::ExpList *args)
+T::CallExp *F_externalCall(std::string s, T::ExpList *args)
 {
   return new T::CallExp(new T::NameExp(TEMP::NamedLabel(s)), args);
 }
 
-TEMP::Temp *F_Arg(int idx)
+//caller_saved register: rax rdi rsi rdx rcx r8 r9 r10 r11
+TEMP::TempList *F_callerSaveRegs()
 {
-  switch (idx)
-  {
-  case 0:
-    return F_RDI();
-  case 1:
-    return F_RSI();
-  case 2:
-    return F_RDX();
-  case 3:
-    return F_RCX();
-  case 4:
-    return F_R8();
-  case 5:
-    return F_R9();
-  default:
-    assert(0);
-  }
+  return new TEMP::TempList(F_RAX(),
+                            new TEMP::TempList(F_RDI(),
+                                               new TEMP::TempList(F_RSI(),
+                                                                  new TEMP::TempList(F_RDX(),
+                                                                                     new TEMP::TempList(F_RCX(),
+                                                                                                        new TEMP::TempList(F_R8(),
+                                                                                                                           new TEMP::TempList(F_R9(),
+                                                                                                                                              new TEMP::TempList(F_R10(),
+                                                                                                                                                                 new TEMP::TempList(F_R11(), NULL)))))))));
+}
+TEMP::Temp *F_RBP(void)
+{
+  if (!rbp)
+    rbp = TEMP::Temp::NewTemp();
+  return rbp;
 }
 
-TEMP::TempList *F_Argregs()
+TEMP::Temp *F_FP(void)
 {
-  static TEMP::TempList *regs = nullptr;
-  if (regs == nullptr)
-  {
-    regs = new TEMP::TempList(
-        F_RDI(), new TEMP::TempList(
-                     F_RSI(), new TEMP::TempList(
-                                  F_RDX(), new TEMP::TempList(
-                                               F_RCX(), new TEMP::TempList(
-                                                            F_R8(), new TEMP::TempList(
-                                                                        F_R9(), NULL))))));
-  }
-  return regs;
+  if (!rbp)
+    rbp = TEMP::Temp::NewTemp();
+  return rbp;
 }
-
-/* %rbx, %rbp, %r12, %r13, %r14, %r15 */
-TEMP::TempList *Calleesaves()
+TEMP::Temp *F_SP(void)
 {
-  static TEMP::TempList *regs = NULL;
-  if (regs == NULL)
-  {
-    regs = new TEMP::TempList(
-        F_RBX(), new TEMP::TempList(
-                     F_RBP(), new TEMP::TempList(
-                                  F_R12(), new TEMP::TempList(
-                                               F_R13(), new TEMP::TempList(
-                                                            F_R14(), new TEMP::TempList(
-                                                                         F_R15(), NULL))))));
-  }
-  return regs;
+  if (!rsp)
+    rsp = TEMP::Temp::NewTemp();
+  return rsp;
 }
-
-/* %r10, %r11 */
-TEMP::TempList *Callersaves()
+TEMP::Temp *F_RAX(void)
 {
-  static TEMP::TempList *regs = nullptr;
-  if (regs == nullptr)
-  {
-    regs = new TEMP::TempList(F_R10(), new TEMP::TempList(F_R11(), nullptr));
-  }
-  return regs;
-}
-
-TEMP::Temp *F_RAX()
-{
-  static TEMP::Temp *rax = nullptr;
   if (!rax)
-  {
     rax = TEMP::Temp::NewTemp();
-  }
   return rax;
 }
-TEMP::Temp *F_RBX()
+TEMP::Temp *F_RV(void) //return value of the callee
 {
-  static TEMP::Temp *rbx = nullptr;
-  if (!rbx)
-  {
-    rbx = TEMP::Temp::NewTemp();
-  }
-  return rbx;
+  if (!rax)
+    rax = TEMP::Temp::NewTemp();
+  return rax;
 }
-TEMP::Temp *F_RCX()
+
+TEMP::Temp *F_RDI()
 {
-  static TEMP::Temp *rcx = nullptr;
-  if (!rcx)
-  {
-    rcx = TEMP::Temp::NewTemp();
-  }
-  return rcx;
-}
-TEMP::Temp *F_RDX()
-{
-  static TEMP::Temp *rdx = nullptr;
-  if (!rdx)
-  {
-    rdx = TEMP::Temp::NewTemp();
-  }
-  return rdx;
+  if (!rdi)
+    rdi = TEMP::Temp::NewTemp();
+  return rdi;
 }
 TEMP::Temp *F_RSI()
 {
-  static TEMP::Temp *rsi = nullptr;
   if (!rsi)
-  {
     rsi = TEMP::Temp::NewTemp();
-  }
   return rsi;
 }
-TEMP::Temp *F_RDI()
+TEMP::Temp *F_RDX()
 {
-  static TEMP::Temp *rdi = nullptr;
-  if (!rdi)
-  {
-    rdi = TEMP::Temp::NewTemp();
-  }
-  return rdi;
+  if (!rdx)
+    rdx = TEMP::Temp::NewTemp();
+  return rdx;
 }
-TEMP::Temp *F_RBP()
+TEMP::Temp *F_RCX()
 {
-  static TEMP::Temp *rbp = nullptr;
-  if (!rbp)
-  {
-    rbp = TEMP::Temp::NewTemp();
-  }
-  return rbp;
-}
-TEMP::Temp *F_RSP()
-{
-  static TEMP::Temp *rsp = nullptr;
-  if (!rsp)
-  {
-    rsp = TEMP::Temp::NewTemp();
-  }
-  return rsp;
+  if (!rcx)
+    rcx = TEMP::Temp::NewTemp();
+  return rcx;
 }
 TEMP::Temp *F_R8()
 {
-  static TEMP::Temp *r8 = nullptr;
   if (!r8)
-  {
     r8 = TEMP::Temp::NewTemp();
-  }
   return r8;
 }
 TEMP::Temp *F_R9()
 {
-  static TEMP::Temp *r9 = nullptr;
   if (!r9)
-  {
     r9 = TEMP::Temp::NewTemp();
-  }
   return r9;
 }
 TEMP::Temp *F_R10()
 {
-  static TEMP::Temp *r10 = nullptr;
   if (!r10)
-  {
     r10 = TEMP::Temp::NewTemp();
-  }
   return r10;
 }
 
 TEMP::Temp *F_R11()
 {
-  static TEMP::Temp *r11 = nullptr;
   if (!r11)
-  {
     r11 = TEMP::Temp::NewTemp();
-  }
   return r11;
 }
 TEMP::Temp *F_R12()
 {
-  static TEMP::Temp *r12 = nullptr;
   if (!r12)
-  {
     r12 = TEMP::Temp::NewTemp();
-  }
   return r12;
 }
+
 TEMP::Temp *F_R13()
 {
-  static TEMP::Temp *r13 = nullptr;
   if (!r13)
-  {
     r13 = TEMP::Temp::NewTemp();
-  }
   return r13;
 }
+
 TEMP::Temp *F_R14()
 {
-  static TEMP::Temp *r14 = nullptr;
   if (!r14)
-  {
     r14 = TEMP::Temp::NewTemp();
-  }
   return r14;
 }
+
 TEMP::Temp *F_R15()
 {
-  static TEMP::Temp *r15 = nullptr;
   if (!r15)
-  {
     r15 = TEMP::Temp::NewTemp();
-  }
   return r15;
 }
 
-
-/* 
- * use in translate.c, Tr_procEntryExit
- * 参考: p121页 第4/5/8条
- * 第4条：入口处理：将逃逸参数(包括静态链)保存至栈帧的指令，以及将非逃逸参数传送到新的临时寄存器的指令 
- * 第5条：入口处理：保存在此函数内用到的calleesave寄存器(包括返回地址寄存器)的存储指令 
- * 第6条：出口处理：用于恢复被调用者保护的寄存器的取数指令 
- * T_stm T_Move(T_exp dst, T_exp src)
- */
-// T::Stm *F_procEntryExit1(F::Frame *frame, T::Stm *stm)
-// {
-// 	Temp_tempList saveTemps = NULL;
-// 	Temp_tempList* saveTempsPtr = &saveTemps;
-
-// 	// step 1 : callee save 
-// 	// sample : move %rbx, temp
-// 	T_stm save = NULL;
-// 	Temp_tempList callees = F_Calleesaves();
-	
-// 	for(; callees; callees = callees->tail)
-// 	{
-// 		Temp_temp temp = Temp_newtemp();
-// 		T_exp expp = T_Temp(temp);
-// 		if (save){
-// 			save = T_Seq(save, T_Move(expp, T_Temp(callees->head)));
-// 		} else{
-// 			save = T_Move(expp, T_Temp(callees->head));
-// 		}
-// 		*saveTempsPtr = Temp_TempList(temp, NULL);
-// 		saveTempsPtr = &((*saveTempsPtr)->tail);
-// 	}
-
-// 	// step 2 : callee restore
-// 	// sample : move temp, %rbx
-// 	T_stm restore = NULL;
-// 	callees = F_Calleesaves();
-
-// 	for(; callees; callees = callees->tail)
-// 	{
-// 		T_exp expp = T_Temp(saveTemps->head);
-// 		if (restore){
-// 			restore = T_Seq(restore, T_Move(T_Temp(callees->head), expp));
-// 		} else{
-// 			restore = T_Move(T_Temp(callees->head), expp);
-// 		}
-// 		saveTemps = saveTemps->tail;
-// 	}
-
-// 	// step 3: combine save, prologue(view), stm, restore and return
-// 	return T_Seq(save, T_Seq(frame->prologue, T_Seq(stm, restore)));
-// }
-
-/*
- * use in codegen.c, F_codegen
- * 参考: p153
- * 在函数体末未添加下沉指令，用以告诉寄存器分配器，某些寄存器在过程的出口是活跃的，可以防止寄存器分配器将其用于其他目的
- */
-// static TEMP::TempList* returnSink = nullptr;
-// AS::InstrList *F_procEntryExit2(F::Frame *frame, AS::InstrList *body)
-// {
-// 	//scan the whole proc body to find max arg's number
-// 	AS_instrList tempBody = body;
-// 	int max_num = 0;
-// 	while(tempBody)
-// 	{
-// 		AS_instr instr = tempBody->head;
-// 		if(instr->kind == I_OPER && !strncmp(instr->u.OPER.assem, " call", 4))
-// 		{
-// 			int num = 0;
-// 			Temp_tempList tempList = instr->u.OPER.src;
-// 			while(tempList){
-// 				tempList = tempList->tail;
-// 				num++;
-// 			}
-// 			max_num = (max_num > num ? max_num : num);
-// 		}
-// 		tempBody = tempBody->tail;
-// 	}
-// 	frame->max_arg_num = max_num;
-// 	if(!returnSink){
-// 		returnSink = Temp_TempList(F_RV(), Temp_TempList(F_SP(), F_Calleesaves()));
-// 	}
-// 	return AS_splice(body, AS_InstrList(AS_Oper("", NULL, returnSink, NULL), NULL));
-// }
-
-/*
- * use in main.c, doProc
- * 参考: p153
- * 我们生成的代码只处理过程体，而不处理入口和出口指令序列
- * struct AS_proc_ { string prolog; AS_instrList body; string epilog; }
- */
-// AS::Proc* F_procEntryExit3(F::Frame *frame, AS::InstrList *body)
-// {
-// 	//static link
-// 	frame->size += 8;
-// 	if(frame->max_arg_num > 6){
-// 		frame->size += (frame->max_arg_num - 6) * F_wordSize;
-// 	}
-
-// 	AS_rewriteFrameSize(frame, body);
-
-// 	char prolog_buf[100], epilog_buf[100];
-// 	sprintf(prolog_buf, "%s:\n", S_name(frame->label));
-// 	sprintf(epilog_buf, " retq\n\n");
-
-//     return AS_Proc(String(prolog_buf), body, String(epilog_buf));
-// }
+TEMP::Temp *F_RBX()
+{
+  if (!rbx)
+    rbx = TEMP::Temp::NewTemp();
+  return rbx;
+}
 
 } // namespace F

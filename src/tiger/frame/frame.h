@@ -3,24 +3,36 @@
 
 #include <string>
 
-#include "tiger/codegen/assem.h"
 #include "tiger/translate/tree.h"
 #include "tiger/util/util.h"
+
+#include "tiger/codegen/assem.h"
+
+static const int wordsize = 8;
 
 namespace F
 {
 
+// need to be declared at first
+class AccessList;
+
 class Frame
 {
-  // Base class
 public:
-  AccessList *formals;
-  TEMP::Label *name;
-  int size = 0;
-
-  Frame(TEMP::Label *name, AccessList *formals) : name(name), formals(formals) {}
-  static Frame *newFrame(TEMP::Label *name, U::BoolList *formals);
+  // Base class
+  TEMP::Label *label;
+  F::AccessList *formals;
+  F::AccessList *locals;
+  T::StmList *view_shift;
+  int s_offset; //Which is commonly a minus number.
+  Frame(TEMP::Label *label,
+        F::AccessList *formals,
+        F::AccessList *locals,
+        T::StmList *view_shift, int s_offset)
+      : label(label), formals(formals), locals(locals), view_shift(view_shift), s_offset(s_offset) {}
 };
+
+Frame *F_newFrame(TEMP::Label *name, U::BoolList *escape);
 
 class Access
 {
@@ -36,28 +48,31 @@ public:
   Access(Kind kind) : kind(kind) {}
 
   // Hints: You may add interface like
-  //        `virtual T::Exp* ToExp(T::Exp* framePtr) const = 0`
-  // virtual T::Exp *ToExp(T::Exp *frame_ptr) const = 0;
+  virtual T::Exp *ToExp(T::Exp *framePtr) const = 0;
 };
 
-class InFrameAccess : public Access
+class InFrameAccess : public F::Access
 {
 public:
   int offset;
+  T::Exp *ToExp(T::Exp *framePtr) const override
+  {
+    return new T::MemExp(new T::BinopExp(T::PLUS_OP, framePtr, new T::ConstExp(this->offset)));
+  }
 
   InFrameAccess(int offset) : Access(INFRAME), offset(offset) {}
 };
 
-class InRegAccess : public Access
+class InRegAccess : public F::Access
 {
 public:
   TEMP::Temp *reg;
-
+  T::Exp *ToExp(T::Exp *framePtr) const override
+  {
+    return new T::TempExp(this->reg);
+  }
   InRegAccess(TEMP::Temp *reg) : Access(INREG), reg(reg) {}
 };
-
-T::Exp *getExp(Access *access, T::Exp *fp);
-Access *allocLocal(Frame *frame, bool escape);
 
 class AccessList
 {
@@ -114,33 +129,28 @@ public:
   FragList(Frag *head, FragList *tail) : head(head), tail(tail) {}
 };
 
-// %rsp
-TEMP::Temp *F_FP();
+T::Stm *F_procEntryExit1(Frame *frame, T::Stm *stm);
 
-// %rax
-TEMP::Temp *F_RV();
+AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *inst);
+AS::InstrList *F_procEntryExit2(AS::InstrList *body);
+F::Access *F_allocLocal(Frame *frame, bool escape);
 
-// TEMP::TempList *F_Specialregs(void);
-TEMP::Temp *F_Arg(int idx);
-TEMP::TempList *F_Argregs();
-TEMP::TempList *Calleesaves();
-TEMP::TempList *Callersaves();
+T::CallExp *F_externalCall(std::string s, T::ExpList *args);
 
-TEMP::TempList *F_registers(void);
 
-T::Exp *externalCall(std::string s, T::ExpList *args);
+/*************************************************/
 
-TEMP::Temp *F_RSP();
-TEMP::Temp *F_RAX();
-TEMP::Temp *F_RBX();
-TEMP::Temp *F_RCX();
-TEMP::Temp *F_RDX();
-TEMP::Temp *F_RSI();
+TEMP::Temp *F_FP(void);
+TEMP::Temp *F_RV(void);
+TEMP::Temp *F_RAX(void);
 TEMP::Temp *F_RDI();
-TEMP::Temp *F_RBP();
-TEMP::Temp *F_RSP();
+TEMP::Temp *F_RSI();
+TEMP::Temp *F_RDX();
+TEMP::Temp *F_RCX();
 TEMP::Temp *F_R8();
 TEMP::Temp *F_R9();
+TEMP::Temp *F_RBX();
+TEMP::Temp *F_RBP();
 TEMP::Temp *F_R10();
 TEMP::Temp *F_R11();
 TEMP::Temp *F_R12();
@@ -148,9 +158,9 @@ TEMP::Temp *F_R13();
 TEMP::Temp *F_R14();
 TEMP::Temp *F_R15();
 
-T::Stm *F_procEntryExit1(F::Frame *frame, T::Stm *stm);
-AS::InstrList *F_procEntryExit2(F::Frame *frame, AS::InstrList *body);
-AS::Proc *F_procEntryExit3(F::Frame *frame, AS::InstrList *body);
+TEMP::Temp *F_SP(void); 
+TEMP::Temp *F_RV(void);
+TEMP::TempList *F_callerSaveRegs();
 
 } // namespace F
 
