@@ -16,11 +16,17 @@
 namespace TR
 {
 
-TR::Exp *Tr_Seq(TR::Exp *left, TR::Exp *right);
 static F::FragList *frags = new F::FragList(nullptr, nullptr);
-void addfrag(F::Frag *frag)
+
+TR::Exp *Nil()
 {
-  frags = new F::FragList(frag, frags);
+  return new TR::ExExp(new T::ConstExp(0));
+}
+
+void do_patch(PatchList *tList, TEMP::Label *label)
+{
+  for (; tList && tList->head; tList = tList->tail)
+    *(tList->head) = label;
 }
 
 Access *Access::allocLocal(Level *level, bool escape)
@@ -60,16 +66,6 @@ T::Stm *NxExp::UnNx() const
 }
 
 Cx NxExp::UnCx() const {}
-
-TR::Exp *Nil()
-{
-  return new TR::ExExp(new T::ConstExp(0));
-}
-void do_patch(PatchList *tList, TEMP::Label *label)
-{
-  for (; tList && tList->head; tList = tList->tail)
-    *(tList->head) = label;
-}
 
 T::Exp *CxExp::UnEx() const
 {
@@ -116,16 +112,15 @@ Level *Outermost()
   return lv;
 }
 
-void procEntryExit(Level *level, TR::Exp *func_body);
 F::FragList *TranslateProgram(A::Exp *root)
 {
   // TODO: Put your codes here (lab5).
 
-  TR::Level *main_level = Outermost();
+  TR::Level *outmost = Outermost();
 
-  TR::ExpAndTy mainexp = root->Translate(E::BaseVEnv(), E::BaseTEnv(), main_level, nullptr);
+  TR::ExpAndTy outmostexp = root->Translate(E::BaseVEnv(), E::BaseTEnv(), outmost, nullptr);
 
-  TR::procEntryExit(main_level, mainexp.exp);
+  TR::procEntryExit(outmost, outmostexp.exp);
 
   //debug
   F::FragList *p = frags;
@@ -148,24 +143,23 @@ F::FragList *TranslateProgram(A::Exp *root)
 
 void procEntryExit(Level *level, TR::Exp *func_body)
 {
-  // pack F_procEntryExit 1,2,3
+  // store func_exp to the return value
+  T::Stm *stm = new T::MoveStm(new T::TempExp(F::F_RV()), func_body->UnEx());
 
-  T::MoveStm *adden = new T::MoveStm(new T::TempExp(F::F_RV()), func_body->UnEx()); //STORE func return value
+  stm = F_procEntryExit1(level->frame, stm);
 
-  T::Stm *func_body_stm = F_procEntryExit1(level->frame, adden);
-
-  func_body = new TR::NxExp(adden);
-
-  F::ProcFrag *head = new F::ProcFrag(func_body_stm, level->frame);
-  addfrag(head);
+  F::ProcFrag *head = new F::ProcFrag(stm, level->frame);
 
   // The added frag is the head of the new frags.
+  frags = new F::FragList(head, frags);
 }
+
 TR::NxExp *generate_assign(TR::Exp *leftvalue, TR::Exp *right)
 {
   TR::NxExp *assignexp = new TR::NxExp(new T::MoveStm(leftvalue->UnEx(), right->UnEx()));
   return assignexp;
 }
+
 Level *Level::NewLevel(Level *parent, TEMP::Label *name,
                        U::BoolList *formals)
 {
@@ -176,7 +170,7 @@ Level *Level::NewLevel(Level *parent, TEMP::Label *name,
   return level;
 }
 
-TR::Exp *Tr_Seq(TR::Exp *left, TR::Exp *right)
+Exp *Tr_Seq(Exp *left, Exp *right)
 {
   /*Don't handle the situation where left is NULL*/
   T::Exp *e;
@@ -205,12 +199,13 @@ TR::ExpAndTy SimpleVar::Translate(S::Table<E::EnvEntry> *venv,
   T::Exp *frame = new T::TempExp(F::F_FP());
   while (level != access->level)
   {
-    frame = new T::MemExp(new T::BinopExp(T::PLUS_OP, frame, new T::ConstExp(-wordsize))); //static link is the first escaped arg;
+    //static link is the first escaped arg;
+    frame = new T::MemExp(new T::BinopExp(T::PLUS_OP, frame, new T::ConstExp(-wordsize)));
     level = level->parent;
   }
-  T::Exp *var_mem = access->access->ToExp(frame);
+  frame = access->access->ToExp(frame);
 
-  return TR::ExpAndTy(new TR::ExExp(var_mem), ((E::VarEntry *)entry)->ty);
+  return TR::ExpAndTy(new TR::ExExp(frame), ((E::VarEntry *)entry)->ty);
 }
 
 TR::ExpAndTy FieldVar::Translate(S::Table<E::EnvEntry> *venv,
@@ -225,10 +220,7 @@ TR::ExpAndTy FieldVar::Translate(S::Table<E::EnvEntry> *venv,
   {
     var = venv->Look(((SimpleVar *)this->var)->sym);
   }
-  else
-  {
-    assert(0);
-  }
+
   assert(((E::VarEntry *)var)->ty->kind == TY::Ty::RECORD);
   TY::FieldList *f = ((TY::RecordTy *)((E::VarEntry *)var)->ty)->fields;
   while (f && f->head)
@@ -245,7 +237,8 @@ TR::ExpAndTy FieldVar::Translate(S::Table<E::EnvEntry> *venv,
   assert(var_exp_ty.exp->kind == TR::Exp::EX);
 
   TR::ExExp *access = (TR::ExExp *)(var_exp_ty.exp);
-  T::MemExp *fieldvar_mem = new T::MemExp(new T::BinopExp(T::PLUS_OP, access->UnEx(), new T::ConstExp(order * wordsize))); //static link is the first escaped arg;
+  //static link is the first escaped arg;
+  T::MemExp *fieldvar_mem = new T::MemExp(new T::BinopExp(T::PLUS_OP, access->UnEx(), new T::ConstExp(order * wordsize)));
 
   // TEMP::Temp * fv =TEMP::Temp::NewTemp();
   // T::MoveStm *fieldvar = new T::MoveStm(new T::TempExp(fv) ,fieldvar_mem );
@@ -264,7 +257,7 @@ TR::ExpAndTy SubscriptVar::Translate(S::Table<E::EnvEntry> *venv,
 
   TR::ExExp *frame = (TR::ExExp *)(var_exp_ty.exp);
   T::MemExp *subvar_mem = new T::MemExp(new T::BinopExp(T::PLUS_OP, frame->UnEx(),
-                                                        new T::BinopExp(T::MUL_OP, subscript_exp_ty.exp->UnEx(), new T::ConstExp(wordsize)))); //static link is the first escaped arg;
+                                                        new T::BinopExp(T::MUL_OP, subscript_exp_ty.exp->UnEx(), new T::ConstExp(wordsize))));
 
   return TR::ExpAndTy(new TR::ExExp(subvar_mem), var_exp_ty.ty);
 }
@@ -303,7 +296,7 @@ TR::ExpAndTy StringExp::Translate(S::Table<E::EnvEntry> *venv,
   TEMP::Label *l = TEMP::NewLabel();
   F::StringFrag *strfrag = new F::StringFrag(l, this->s);
   // need to add to frags
-  TR::addfrag(strfrag);
+  TR::frags = new F::FragList(strfrag, TR::frags);
   TR::ExExp *exexp = new TR::ExExp(new T::NameExp(l));
   return TR::ExpAndTy(exexp, TY::StringTy::Instance());
 }

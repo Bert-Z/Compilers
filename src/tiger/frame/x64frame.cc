@@ -7,24 +7,24 @@
 namespace F
 {
 
-static TEMP::Temp *rbp = NULL;
-static TEMP::Temp *rax = NULL;
-static TEMP::Temp *rdi = NULL;
-static TEMP::Temp *rsi = NULL;
-static TEMP::Temp *rdx = NULL;
-static TEMP::Temp *rcx = NULL;
-static TEMP::Temp *r8 = NULL;
-static TEMP::Temp *r9 = NULL;
+static TEMP::Temp *rbp = nullptr;
+static TEMP::Temp *rax = nullptr;
+static TEMP::Temp *rdi = nullptr;
+static TEMP::Temp *rsi = nullptr;
+static TEMP::Temp *rdx = nullptr;
+static TEMP::Temp *rcx = nullptr;
+static TEMP::Temp *r8 = nullptr;
+static TEMP::Temp *r9 = nullptr;
 
-static TEMP::Temp *r10 = NULL;
-static TEMP::Temp *r11 = NULL;
-static TEMP::Temp *r12 = NULL;
-static TEMP::Temp *r13 = NULL;
-static TEMP::Temp *r14 = NULL;
-static TEMP::Temp *r15 = NULL;
+static TEMP::Temp *r10 = nullptr;
+static TEMP::Temp *r11 = nullptr;
+static TEMP::Temp *r12 = nullptr;
+static TEMP::Temp *r13 = nullptr;
+static TEMP::Temp *r14 = nullptr;
+static TEMP::Temp *r15 = nullptr;
 
-static TEMP::Temp *rsp = NULL;
-static TEMP::Temp *rbx = NULL;
+static TEMP::Temp *rsp = nullptr;
+static TEMP::Temp *rbx = nullptr;
 
 class X64Frame : public Frame
 {
@@ -42,16 +42,18 @@ Frame *F_newFrame(TEMP::Label *name, U::BoolList *escapes)
   F::AccessList *formals = new AccessList(nullptr, nullptr);
   T::StmList *view_shift = new T::StmList(nullptr, nullptr);
 
-  T::StmList *v_tail = view_shift;
-  F::AccessList *f_tail = formals;
+  T::StmList *vslist = view_shift;
+  F::AccessList *formalslist = formals;
   bool escape;
   TEMP::Temp *temp = TEMP::Temp::NewTemp();
 
-  int formal_off = wordsize; // The seventh arg was located at 8(%rbp)
+  // The seventh arg was located at 8(%rbp)
+  int formal_off = wordsize; 
   
-  X64Frame *newframe = new X64Frame(name, NULL, NULL, NULL, -8);
+  X64Frame *newframe = new X64Frame(name, nullptr, nullptr, nullptr, -8);
 
-  int num = 0; //the num of formals
+  //the num of formals
+  int num = 1; 
   
   /*If the formal is escape, then allocate it on the frame.
 	  Else,allocate it on the temp.*/
@@ -62,93 +64,94 @@ Frame *F_newFrame(TEMP::Label *name, U::BoolList *escapes)
     {
       switch (num)
       {
-      case 0:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 1:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_RDI())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
-      case 1:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 2:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_RSI())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
-      case 2:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 3:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_RDX())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
-      case 3:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 4:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_RCX())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
-      case 4:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 5:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_R8())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
-      case 5:
-        v_tail->tail = new T::StmList(new T::MoveStm(
+      case 6:
+        vslist->tail = new T::StmList(new T::MoveStm(
                                           new T::MemExp(
                                               new T::BinopExp(
                                                   T::PLUS_OP, new T::TempExp(F::F_FP()), new T::ConstExp(newframe->s_offset))),
                                           new T::TempExp(F_R9())),
-                                      NULL);
+                                      nullptr);
         newframe->s_offset -= wordsize;
-        f_tail->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), NULL);
-        f_tail = f_tail->tail;
-        v_tail = v_tail->tail;
+        formalslist->tail = new AccessList(new F::InFrameAccess(newframe->s_offset), nullptr);
+        formalslist = formalslist->tail;
+        vslist = vslist->tail;
         break;
       default:
       {
-        f_tail->tail = new AccessList(new F::InFrameAccess(formal_off), NULL); //sequence of formals here is reversed.
-        f_tail = f_tail->tail;
+        //sequence of formals here is reversed.
+        formalslist->tail = new AccessList(new F::InFrameAccess(formal_off), nullptr); 
+        formalslist = formalslist->tail;
         formal_off += wordsize;
       }
       }
     }
     else
     {
-      //allocate it on the temp
+      //allocate it(escape) on the temp
     }
   }
 
-  newframe = new X64Frame(name, formals->tail, NULL, view_shift->tail, newframe->s_offset);
+  newframe = new X64Frame(name, formals->tail, nullptr, view_shift->tail, newframe->s_offset);
   return newframe;
 }
 
@@ -173,26 +176,27 @@ T::Stm *F_procEntryExit1(Frame *frame, T::Stm *stm)
 AS::InstrList *F_procEntryExit2(AS::InstrList *body)
 {
 
-  static TEMP::TempList *returnSink = NULL;
+  static TEMP::TempList *returnSink = nullptr;
   if (!returnSink)
-    returnSink = new TEMP::TempList(F::F_SP(), new TEMP::TempList(F::F_RAX(), NULL));
-  return AS::InstrList::Splice(body, new AS::InstrList(new AS::OperInstr("#exit2", NULL, returnSink, NULL), NULL));
+    returnSink = new TEMP::TempList(F::F_SP(), new TEMP::TempList(F::F_RAX(), nullptr));
+  return AS::InstrList::Splice(body, new AS::InstrList(new AS::OperInstr("#exit2", nullptr, returnSink, nullptr), nullptr));
 }
+
 AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *inst)
 {
   std::string fs = TEMP::LabelString(frame->label) + "_framesize";
 
   std::string prolog;
-  std::stringstream ioss;
-  ioss << "#exit3\n .set " + fs + ",0x" << std::hex << -frame->s_offset << "\n";
-  ioss << "subq $0x" << std::hex << -frame->s_offset << ",%rsp\n";
+  std::stringstream ss;
+  ss << "#exit3\n .set " + fs + ",0x" << std::hex << -frame->s_offset << "\n";
+  ss << "subq $0x" << std::hex << -frame->s_offset << ",%rsp\n";
 
-  prolog = ioss.str();
+  prolog = ss.str();
 
-  std::stringstream ios;
-  ios << "addq $0x" << std::hex << -frame->s_offset << ",%rsp\nret\n\n";
+  std::stringstream ess;
+  ess << "addq $0x" << std::hex << -frame->s_offset << ",%rsp\nret\n\n";
 
-  std::string epilog = ios.str();
+  std::string epilog = ess.str();
   return new AS::Proc(prolog, inst, epilog);
 }
 
@@ -227,7 +231,7 @@ TEMP::TempList *F_callerSaveRegs()
                                                                                                         new TEMP::TempList(F_R8(),
                                                                                                                            new TEMP::TempList(F_R9(),
                                                                                                                                               new TEMP::TempList(F_R10(),
-                                                                                                                                                                 new TEMP::TempList(F_R11(), NULL)))))))));
+                                                                                                                                                                 new TEMP::TempList(F_R11(), nullptr)))))))));
 }
 TEMP::Temp *F_RBP(void)
 {

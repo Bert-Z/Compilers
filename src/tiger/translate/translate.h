@@ -37,8 +37,6 @@ class Level {
  public:
   F::Frame *frame;
   Level *parent;
-//   // add formals
-//   AccessList *formals=nullptr;
 
   Level(F::Frame *frame, Level *parent) : frame(frame), parent(parent) {}
   AccessList *Formals(Level *level) { return nullptr; }
@@ -129,9 +127,21 @@ class CxExp : public Exp {
   Cx UnCx() const override;
 };
 
+PatchList *join_patch(PatchList *first, PatchList *second);
+
 Level* Outermost();
 
 F::FragList* TranslateProgram(A::Exp*);
+
+TR::Exp *Nil();
+
+void do_patch(PatchList *tList, TEMP::Label *label);
+
+void procEntryExit(Level *level, TR::Exp *func_body);
+
+TR::NxExp *generate_assign(TR::Exp *leftvalue, TR::Exp *right);
+
+Exp *Tr_Seq(Exp *left, Exp *right);
 
 }  // namespace TR
 

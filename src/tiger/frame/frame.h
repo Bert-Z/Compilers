@@ -129,10 +129,16 @@ public:
   FragList(Frag *head, FragList *tail) : head(head), tail(tail) {}
 };
 
+// 将每个传入寄存器的参数存放到从函数内看它的位置。
+// SeqStm : |1(%rdi)||2(%rsi)||3||4||5||6||stm||const(0)|
 T::Stm *F_procEntryExit1(Frame *frame, T::Stm *stm);
 
-AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *inst);
 AS::InstrList *F_procEntryExit2(AS::InstrList *body);
+
+// 把InstList包成一个Proc
+AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *inst);
+
+// 分配局部变量
 F::Access *F_allocLocal(Frame *frame, bool escape);
 
 T::CallExp *F_externalCall(std::string s, T::ExpList *args);
