@@ -5,6 +5,9 @@ namespace RA
 
 void init_regmap();
 void allocate_reg(AS::InstrList *instr, TEMP::Map *map);
+static void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map);
+std::string *find_reg(bool def);
+
 void addreg(TEMP::Map *m)
 {
 
@@ -51,99 +54,24 @@ void addreg(TEMP::Map *m)
 
 bool isreg(TEMP::Temp *t)
 {
-  if (t == F::F_RDX())
-  {
-    std::string *addr = new std::string("%rdx");
-    return true;
-  }
-  if (t == F::F_RBX())
-  {
-    std::string *addr = new std::string("%rbx");
 
-    return true;
-  }
-  if (t == F::F_FP() || t == F::F_RBP())
+  if (t == F::F_RDX() ||
+      t == F::F_RBX() ||
+      t == F::F_FP() || t == F::F_RBP() ||
+      t == F::F_SP() ||
+      t == F::F_RAX() || t == F::F_RV() ||
+      t == F::F_RSI() ||
+      t == F::F_RCX() ||
+      t == F::F_RDI() ||
+      t == F::F_R8() ||
+      t == F::F_R9() ||
+      t == F::F_R10() ||
+      t == F::F_R11() ||
+      t == F::F_R12() ||
+      t == F::F_R13() ||
+      t == F::F_R14() ||
+      t == F::F_R15())
   {
-    std::string *addr = new std::string("%rbp");
-
-    return true;
-  }
-  if (t == F::F_SP())
-  {
-    std::string *addr = new std::string("%rsp");
-
-    return true;
-  }
-  if (t == F::F_RAX() || t == F::F_RV())
-  {
-    std::string *addr = new std::string("%rax");
-
-    return true;
-  }
-  if (t == F::F_RSI())
-  {
-    std::string *addr = new std::string("%rsi");
-
-    return true;
-  }
-  if (t == F::F_RCX())
-  {
-    std::string *addr = new std::string("%rcx");
-
-    return true;
-  }
-  if (t == F::F_RDI())
-  {
-    std::string *addr = new std::string("%rdi");
-
-    return true;
-  }
-  if (t == F::F_R8())
-  {
-    std::string *addr = new std::string("%r8");
-
-    return true;
-  }
-  if (t == F::F_R9())
-  {
-    std::string *addr = new std::string("%r9");
-
-    return true;
-  }
-  if (t == F::F_R10())
-  {
-    std::string *addr = new std::string("%r10");
-
-    return true;
-  }
-  if (t == F::F_R11())
-  {
-    std::string *addr = new std::string("%r11");
-
-    return true;
-  }
-  if (t == F::F_R12())
-  {
-    std::string *addr = new std::string("%r12");
-
-    return true;
-  }
-  if (t == F::F_R13())
-  {
-    std::string *addr = new std::string("%r13");
-
-    return true;
-  }
-  if (t == F::F_R14())
-  {
-    std::string *addr = new std::string("%r14");
-
-    return true;
-  }
-  if (t == F::F_R15())
-  {
-    std::string *addr = new std::string("%r15");
-
     return true;
   }
 
@@ -189,8 +117,6 @@ static void add_temp(AS::InstrList *instr)
     instr = instr->tail;
   }
 }
-
-static void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map);
 
 void regmap_setone(std::string s)
 {
@@ -249,18 +175,18 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
 {
   std::string fs = TEMP::LabelString(f->label) + "_framesize";
 
-  AS::InstrList *il = new AS::InstrList(NULL, NULL);
-  *il = *pil;
+  AS::InstrList *il = pil;
+
   AS::InstrList *instr, //every instruction in il
       *last,            // last handled instruction
       *next,            //next instruction
       *new_instr;       //new_instruction after spilling.
   int off;
-  int count = 0;
+  int count = spilledNodes.size();
+  printf("-------====tempcount:%d=====-----\n", count);
 
   while (!spilledNodes.empty())
   {
-    printf("-------====tempcount:%d=====-----\n", count);
     TEMP::Temp *spilltemp = *(spilledNodes.begin());
 
     printf("-------====spilltemp :%d=====-----\n", spilltemp->Int());
@@ -268,11 +194,11 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
     off = f->s_offset;
     f->s_offset -= 8;
     instr = il;
-    last = NULL;
-    count++;
+    last = nullptr;
+    
     while (instr)
     {
-      TEMP::Temp *t = NULL;
+      TEMP::Temp *t = nullptr;
       next = instr->tail;
       TEMP::TempList *def = nullptr, *use = nullptr;
       switch (instr->head->kind)
@@ -286,10 +212,8 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
         def = ((AS::OperInstr *)instr->head)->dst;
         use = ((AS::OperInstr *)instr->head)->src;
         break;
-      default:
-        def = NULL;
-        use = NULL;
       }
+
       if (use && intemp(use, spilltemp))
       {
 
@@ -298,7 +222,7 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
         if (instr->head->kind == AS::Instr::OPER)
         {
           std::string assem = ((AS::OperInstr *)instr->head)->assem;
-          printf("%s \n ", assem.c_str() );
+          printf("%s \n ", assem.c_str());
         }
         if (instr->head->kind == AS::Instr::MOVE)
         {
@@ -318,7 +242,7 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
         assem = ioss.str();
 
         //Add the new instruction betfore the old one.
-        AS::OperInstr *os_instr = new AS::OperInstr(assem, new TEMP::TempList(t, nullptr), NULL, new AS::Targets(NULL));
+        AS::OperInstr *os_instr = new AS::OperInstr(assem, new TEMP::TempList(t, nullptr), nullptr, new AS::Targets(nullptr));
         new_instr = new AS::InstrList(os_instr, instr);
         if (last)
         {
@@ -341,17 +265,17 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
         {
           if (t == use->head)
           {
-            os_instr_store = new AS::OperInstr(assem_store, NULL, new TEMP::TempList(use->head, nullptr), new AS::Targets(NULL));
+            os_instr_store = new AS::OperInstr(assem_store, nullptr, new TEMP::TempList(use->head, nullptr), new AS::Targets(nullptr));
           }
           else
           {
-            os_instr_store = new AS::OperInstr("#free t" + assem_store, NULL,
-                                               new TEMP::TempList(use->head, new TEMP::TempList(t, nullptr)), new AS::Targets(NULL));
+            os_instr_store = new AS::OperInstr("#free t" + assem_store, nullptr,
+                                               new TEMP::TempList(use->head, new TEMP::TempList(t, nullptr)), new AS::Targets(nullptr));
           }
         }
         else
         {
-          os_instr_store = new AS::OperInstr(assem_store, NULL, new TEMP::TempList(t, nullptr), new AS::Targets(NULL));
+          os_instr_store = new AS::OperInstr(assem_store, nullptr, new TEMP::TempList(t, nullptr), new AS::Targets(nullptr));
         }
         instr->tail = new AS::InstrList(os_instr_store, next);
         next = instr->tail;
@@ -383,7 +307,7 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
         assem = ioss.str();
 
         //Add the new instruction betfore the old one.
-        AS::OperInstr *os_instr = new AS::OperInstr(assem, NULL, new TEMP::TempList(t, nullptr), new AS::Targets(NULL));
+        AS::OperInstr *os_instr = new AS::OperInstr(assem, nullptr, new TEMP::TempList(t, nullptr), new AS::Targets(nullptr));
         instr->tail = new AS::InstrList(os_instr, next);
 
         last = instr->tail;
@@ -396,7 +320,7 @@ void RewriteProgram(F::Frame *f, AS::InstrList *pil, TEMP::Map *map)
   *pil = *il;
 }
 
-std::string *find_reg(bool def);
+
 void allocate_reg(AS::InstrList *instr, TEMP::Map *map)
 {
 
@@ -417,10 +341,10 @@ void allocate_reg(AS::InstrList *instr, TEMP::Map *map)
       use = ((AS::MoveInstr *)instr->head)->src;
       break;
     default:
-      def = NULL;
-      use = NULL;
+      def = nullptr;
+      use = nullptr;
     }
-    if (def == NULL && use == NULL)
+    if (def == nullptr && use == nullptr)
     {
       continue;
     }
@@ -436,7 +360,7 @@ void allocate_reg(AS::InstrList *instr, TEMP::Map *map)
             //allocate register
             std::string *regname = find_reg(true);
             spillmap[def->head] = regname;
-            assert(map->Look(def->head) == NULL);
+            assert(map->Look(def->head) == nullptr);
             map->Enter(def->head, regname);
             printf("%s Spill load allocated temp:%d\n", (*spillmap[def->head]).c_str(), def->head->Int());
           }
@@ -496,7 +420,7 @@ void allocate_reg(AS::InstrList *instr, TEMP::Map *map)
           // }
 
           std::string *regname = find_reg(0);
-          assert(map->Look(def->head) == NULL);
+          assert(map->Look(def->head) == nullptr);
           map->Enter(def->head, regname);
           // printf("%s allocated temp: %d  \n", (*regname).c_str(), def->head->Int());
         }
@@ -529,6 +453,5 @@ void init_regmap()
   regmap[new std::string("%r14")] = 0;
   regmap[new std::string("%r15")] = 0;
   regmap[new std::string("%rbx")] = 0;
-
 }
 } // namespace RA
