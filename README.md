@@ -1,4 +1,5 @@
 # Tiger Compiler Labs in C++
+> To be honst, I find out that there is a lot of optimitions could be done in compiler after talking with my roommate, such as SSA, DCE, Value numbering, Const propagation and so on. And he also recommends me a book named Engineering a Compiler. I hope I can read it later someday and optimize my compiler.
 
 ## Contents
 
