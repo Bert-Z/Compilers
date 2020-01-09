@@ -52,9 +52,9 @@ static TEMP::Temp *munchOpExp(T::BinopExp *exp)
   case T::DIV_OP:
   {
     emit(new AS::MoveInstr("movq `s0, `d0", L(F::F_RAX(), nullptr), L(left, nullptr)));
-    emit(new AS::OperInstr("cltd", nullptr, nullptr, nullptr));
+    emit(new AS::OperInstr("cltd", L(F::F_RAX(), L(F::F_RDX(),nullptr)), L(F::F_RAX(),nullptr), new AS::Targets(nullptr)));
     emit(new AS::OperInstr("idivq `s0", nullptr,
-                           L(right, nullptr), new AS::Targets((nullptr))));
+                           L(right,nullptr), new AS::Targets((nullptr))));
     emit(new AS::MoveInstr("movq `s0, `d0", L(r, nullptr), L(F::F_RAX(), nullptr)));
     return r;
   }
@@ -388,14 +388,14 @@ AS::InstrList *Codegen(F::Frame *f, T::StmList *stmList)
   // TODO: Put your codes here (lab6).
   fs = TEMP::LabelString(f->label) + "_framesize";
   instrList = nullptr;
-  //saveCalleeRegs();
+  saveCalleeRegs();
   //push reg in stack
   for (; stmList; stmList = stmList->tail)
   {
     munchStm(stmList->head);
   }
 
-  //restoreCalleeRegs();
+  restoreCalleeRegs();
   return F::F_procEntryExit2(instrList);
 }
 
