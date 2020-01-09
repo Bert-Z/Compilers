@@ -123,7 +123,7 @@ Node<T>* Graph<T>::NewNode(T* info) {
 
 template <class T>
 bool Node<T>::GoesTo(Node<T>* n) {
-  return this->succs_->inNodeList(n);
+  return this->succs_->InNodeList(n);
 }
 
 template <class T>
@@ -131,7 +131,7 @@ void Graph<T>::AddEdge(Node<T>* from, Node<T>* to) {
   assert(from);
   assert(to);
   assert(from->mygraph_ == to->mygraph_);
-  if (from->goesTo(to)) return;
+  if (from->GoesTo(to)) return;
   to->preds_ = new NodeList<T>(from, to->preds_);
   from->succs_ = new NodeList<T>(to, from->succs_);
 }

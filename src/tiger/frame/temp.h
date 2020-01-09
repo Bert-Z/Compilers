@@ -30,7 +30,6 @@ class Map {
   static Map *Name();
   static Map *LayerMap(Map *over, Map *under);
 
- private:
   TAB::Table<Temp, std::string> *tab;
   Map *under;
 

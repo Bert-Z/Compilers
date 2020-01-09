@@ -6,6 +6,8 @@
 #include "tiger/frame/temp.h"
 #include "tiger/util/graph.h"
 
+#include<string>
+
 namespace FG {
 
 TEMP::TempList* Def(G::Node<AS::Instr>* n);

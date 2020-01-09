@@ -122,9 +122,11 @@ void CallExp::Print(FILE *out, int d) const {
 }
 
 void StmList::Print(FILE *out) const {
-  this->head->Print(out, 0);
-  fprintf(out, "\n");
-  if (this->tail) this->tail->Print(out);
+  if(this && this->head){
+    this->head->Print(out, 0);
+    fprintf(out, "\n");
+    if (this->tail) this->tail->Print(out);
+  }
 }
 
 RelOp notRel(RelOp r) {
